@@ -22,7 +22,7 @@ class Split(Component):
     '''
     def define(self):
         self.inputs.add(InputPort('IN'))
-        self.outputs.add(ArrayOutputPort('OUT'))
+        self.outputs.add(ArrayOutputPort('OUT', 10))
 
     def run(self):
         packet = self.inputs.IN.receive()
@@ -35,7 +35,7 @@ class Concat(Component):
     Concatenate inputs from IN[] into OUT
     '''
     def define(self):
-        self.inputs.add(ArrayInputPort('IN'))
+        self.inputs.add(ArrayInputPort('IN', 10))
         self.outputs.add(OutputPort('OUT'))
 
     def run(self):

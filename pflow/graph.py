@@ -89,7 +89,7 @@ class ArrayPort(BasePort):
         self._ports = []
         port_class = self.get_port_class()
         for i in range(self._max_ports):
-            self._ports.append(port_class(self._name,
+            self._ports.append(port_class('%s_%d' % (self._name, i),
                                           **self._kwargs))
 
     @abstractmethod
