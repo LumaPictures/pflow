@@ -6,3 +6,5 @@
 *.DS_Store
 *.iml
 /.idea/
+/*.egg-info/
+/.eggs/
