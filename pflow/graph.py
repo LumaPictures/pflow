@@ -11,7 +11,11 @@ from . import exc
 log = logging.getLogger(__name__)
 
 
-class Port(object):
+class BasePort(object):
+    pass
+
+
+class Port(BasePort):
     __metaclass__ = ABCMeta
 
     def __init__(self, name, optional=False):
@@ -53,7 +57,7 @@ class InputPort(Port):
     Port that is defined on the input side of a component.
     Leads from either an OutputPort of an upstream component or an initial Packet.
     '''
-    def __init__(self, name='in', **kwargs):
+    def __init__(self, name='IN', **kwargs):
         super(InputPort, self).__init__(name, **kwargs)
 
     def receive(self):
@@ -67,13 +71,42 @@ class InputPort(Port):
         log.debug('Receiving packet over port %s' % self.name)
 
 
-class ArrayPortMixin(object):
-    pass
+class ArrayPort(BasePort):
+    __metaclass__ = ABCMeta
+
+    def __init__(self, name, max_ports, **kwargs):
+        self._name = name
+        self._max_ports = max_ports
+        self._kwargs = kwargs
+
+        self._ports = []
+        self.allocate()
+
+    def allocate(self):
+        '''
+        Allocate array port.
+        '''
+        self._ports = []
+        port_class = self.get_port_class()
+        for i in range(self._max_ports):
+            self._ports.append(port_class(self._name,
+                                          **self._kwargs))
+
+    @abstractmethod
+    def get_port_class(self):
+        return Port  # Make IDE shut up
+
+    def __getitem__(self, index):
+        return self._ports[index]
+
+    def __iter__(self):
+        return iter(self._ports)
 
 
-class ArrayInputPort(InputPort,
-                     ArrayPortMixin):
-    pass
+class ArrayInputPort(ArrayPort):
+    @abstractmethod
+    def get_port_class(self):
+        return InputPort
 
 
 class OutputPort(Port):
@@ -81,7 +114,7 @@ class OutputPort(Port):
     Port that is defined on the output side of a Component.
     Leads into an InputPort of a downstream component.
     '''
-    def __init__(self, name='out', **kwargs):
+    def __init__(self, name='OUT', **kwargs):
         super(OutputPort, self).__init__(name, **kwargs)
 
     def send(self, packet):
@@ -94,9 +127,10 @@ class OutputPort(Port):
         log.debug('Sending packet over port %s' % self.name)
 
 
-class ArrayOutputPort(OutputPort,
-                      ArrayPortMixin):
-    pass
+class ArrayOutputPort(ArrayPort):
+    @abstractmethod
+    def get_port_class(self):
+        return InputPort
 
 
 class Packet(object):
@@ -140,18 +174,18 @@ class AddressablePorts(object):
     '''
     Descriptor that allows addressing ports by name (as attributes).
     '''
-    def __init__(self, required_superclass):
+    def __init__(self, *required_superclasses):
         self._ports = {}
 
-        if not issubclass(required_superclass, Port):
+        if not all(map(lambda c: issubclass(c, BasePort), required_superclasses)):
             raise ValueError('required_superclass must be Port subclass')
 
-        self._required_superclass = required_superclass
+        self._required_superclasses = required_superclasses
 
     def add(self, port):
-        if not isinstance(port, self._required_superclass):
-            raise ValueError('port "%s" must be an instance of %s' %
-                             (port.name, self._required_superclass.__name__))
+        if not isinstance(port, self._required_superclasses):
+            raise ValueError('port "%s" must be an instance of: %s' %
+                             (port.name, ', '.join([c.__name__ for c in self._required_superclasses])))
 
         if port.name in self._ports:
             raise ValueError('port "%s" already exists' % port.name)
@@ -183,8 +217,8 @@ class Component(object):
 
     def __init__(self, name):
         self.name = name
-        self.inputs = AddressablePorts(InputPort)
-        self.outputs = AddressablePorts(OutputPort)
+        self.inputs = AddressablePorts(InputPort, ArrayInputPort)
+        self.outputs = AddressablePorts(OutputPort, ArrayOutputPort)
         self.state = ComponentState.NOT_STARTED
         self.owned_packet_count = 0
         self.define()
