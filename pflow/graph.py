@@ -18,12 +18,17 @@ class BasePort(object):
 class Port(BasePort):
     __metaclass__ = ABCMeta
 
-    def __init__(self, name, optional=False):
+    def __init__(self, name, optional=False, type_=str):
+        if not isinstance(name, basestring):
+            raise ValueError('name must be a string')
+
         self.name = name
+        self.optional = optional  # Is this port optional?
+        self.type_ = type_  # Data type
+
         self.sender = None  # Sending Component
         self.receiver = None  # Receiving Component
-        self.type_ = None  # Data type
-        self.optional = False  # Is this port optional?
+
         self._buffer = Queue()  # TODO: This can be an mp.Queue() or a message queue depending on runtime
         self._is_open = False
 
@@ -45,11 +50,15 @@ class Port(BasePort):
 
     @property
     def is_open(self):
-        return self._is_open
+        return self.is_connected and self._is_open
 
     def is_connected(self):
         return (self.sender is not None and
                 self.receiver is not None)
+
+    def _check_ready_state(self):
+        if not self.is_open:
+            raise exc.PortClosedError
 
 
 class InputPort(Port):
@@ -66,15 +75,22 @@ class InputPort(Port):
 
         :return: Packet that was received or None if EOF
         '''
+        self._check_ready_state()
+
         # TODO: claim ownership
         # TODO: increment refcount
+
         log.debug('Receiving packet over port %s' % self.name)
+        raise NotImplementedError
 
 
 class ArrayPort(BasePort):
     __metaclass__ = ABCMeta
 
     def __init__(self, name, max_ports, **kwargs):
+        if not isinstance(name, basestring):
+            raise ValueError('name must be a string')
+
         self._name = name
         self._max_ports = max_ports
         self._kwargs = kwargs
@@ -123,7 +139,10 @@ class OutputPort(Port):
 
         :param packet: the Packet to send over this output port.
         '''
+        self._check_ready_state()
+
         # TODO: decrement refcount
+
         log.debug('Sending packet over port %s' % self.name)
 
 
@@ -134,10 +153,12 @@ class ArrayOutputPort(ArrayPort):
 
 
 class Packet(object):
+    '''
+    Information packet (IP)
+    '''
     def __init__(self, value):
-        self._value = value
+        self.value = value
         self._owner = None  # Component that owns this
-        self.type_ = None  # TODO
         self.attrs = {}  # Named attributes
 
     @property
@@ -149,11 +170,6 @@ class Packet(object):
         # TODO: unset old owner by decrementing self._owner.owned_packet_count
         self._owner = value
 
-    @property
-    def value(self):
-        # TODO: typecast to self.type_
-        return self._value
-
 
 class BracketPacket(Packet):
     '''
@@ -163,10 +179,16 @@ class BracketPacket(Packet):
 
 
 class StartBracket(BracketPacket):
+    '''
+    Start of bracketed data.
+    '''
     pass
 
 
 class EndBracket(BracketPacket):
+    '''
+    End of bracketed data.
+    '''
     pass
 
 
@@ -216,6 +238,9 @@ class Component(object):
     __metaclass__ = ABCMeta
 
     def __init__(self, name):
+        if not isinstance(name, basestring):
+            raise ValueError('name must be a string')
+
         self.name = name
         self.inputs = AddressablePorts(InputPort, ArrayInputPort)
         self.outputs = AddressablePorts(OutputPort, ArrayOutputPort)
@@ -231,6 +256,7 @@ class Component(object):
         pass
 
     def _run(self):
+        # TODO: Handle timeouts
         while self.state not in (ComponentState.TERMINATED,
                                  ComponentState.ERROR):
             self.run()
@@ -245,14 +271,14 @@ class Component(object):
         '''
         Drop a Packet.
         '''
-        pass
+        raise NotImplementedError
 
     def validate(self):
         '''
         Validate component state and the state of all its ports.
-        Raises a ComponentInvalidError if there was a problem.
+        Raises a FlowError if there was a problem.
         '''
-        # raise exc.ComponentInvalidError, 'This component is invalid!'
+        # raise exc.FlowError, 'This component is invalid!'
         log.debug('Validating component %s...' % self.__class__.__name__)
 
         # TODO: Ensure there's at least 1 port defined
@@ -264,6 +290,7 @@ class Component(object):
     def terminate(self):
         log.debug('Terminating component %s...' % self.__class__.__name__)
         self.state = ComponentState.TERMINATED
+        raise NotImplementedError
 
     def yield_control(self):
         '''
@@ -272,6 +299,7 @@ class Component(object):
         log.debug('Component %s is going dormant...' % self.__class__.__name__)
         self.state = ComponentState.DORMANT
         # TODO: Yield to scheduler or suspend thread
+        raise NotImplementedError
 
 
 class InitialPacketCreator(Component):
@@ -284,11 +312,28 @@ class InitialPacketCreator(Component):
     '''
     def __init__(self, value):
         self.value = value
-        super(InitialPacketCreator, self).__init__(inputs=None,
-                                                   outputs=OutputPort())
+        super(InitialPacketCreator, self).__init__('IIP_GEN')
+
+    def define(self):
+        self.outputs.add(OutputPort('OUT'))
+
+    def run(self):
+        self.outputs.OUT.send(Packet(self.value))
+
+
+class Connection(object):
+    '''
+    Connected edge in graph.
+
+    This should provide buffering between component ports.
+    '''
+    # TODO
+    pass
 
 
 class Graph(Component):
+    __metaclass__ = ABCMeta
+
     def __init__(self, *args, **kwargs):
         self.components = set()
         self.ports = set()
@@ -309,7 +354,8 @@ class Graph(Component):
         self.validate()
         log.debug('Executing graph...')
 
-        # TODO: initiate all self-starters
+        # TODO: find and run all self-starters
+
         pass
 
     def validate(self):
@@ -322,6 +368,7 @@ class Graph(Component):
         return self
 
     def load_fbp_string(self, fbp_script):
+        # TODO: find python fbp parser
         # TODO: parse fbp string and build graph
 
         return self
@@ -337,6 +384,9 @@ class SubGraph(Graph):
     '''
     SubGraphs are just like Graphs but have slightly different run() semantics.
     '''
+    __metaclass__ = ABCMeta
+
     def run(self):
+        # TODO:
         pass
 

@@ -1,35 +1,50 @@
 #!/usr/bin/env python
+import sys
 from setuptools import setup
 
 import pflow
 
+module_name = 'pflow'
+
+# Dependencies
+install_requires = [
+    'argparse',
+    'haigha',  # amqp
+    'pyparsing'  # fbp grammar
+]
+
+# Test dependencies
+test_requires = [
+]
+
+
+# Dependencies: Python 3.x backports for 2.x
+if sys.version_info.major < 3:
+    install_requires.append('enum34')  # enum.Enum
+    test_requires.append('mock')  # mock (now in unittest.mock)
+
+
 setup(
-    name='pflow',
+    name=module_name,
     version=pflow.__version__,
 
     author='Chris Lyon',
-    author_email='flushot@gmail.com',
+    author_email='chrisl@luma-pictures.com',
 
-    description='Flow Based Programming for Python',
+    description='%s - Flow Based Programming for Python' % module_name,
     long_description=open('README.md').read(),
 
-    url='https://github.com/Flushot/pflow',
+    url='https://github.com/Flushot/%s' % module_name,
 
     license='Apache License 2.0',
     classifiers=[
         'Intended Audience :: Developers'
         'Development Status :: 2 - Pre-Alpha',
         'License :: OSI Approved :: Apache Software License',
-        ],
-
-    install_requires=[
-        'haigha',
-        'argparse',
-        'enum34'
     ],
 
-    test_suite='pflow',
-    tests_require=[
-        'mock'
-    ]
+    install_requires=install_requires,
+
+    test_suite=module_name,
+    tests_require=test_requires
 )

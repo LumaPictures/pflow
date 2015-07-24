@@ -1,10 +1,26 @@
 class FlowError(Exception):
+    '''
+    Error in the flow design.
+    '''
     pass
 
 
-class ComponentError(FlowError):
+class ComponentError(Exception):
+    '''
+    Component-level error.
+    '''
     pass
 
 
-class ComponentInvalidError(ComponentError):
+class PortError(FlowError):
+    '''
+    Port error.
+    '''
+    pass
+
+
+class PortClosedError(PortError):
+    '''
+    Port is closed.
+    '''
     pass
