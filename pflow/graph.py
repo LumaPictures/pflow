@@ -1,5 +1,6 @@
 from abc import ABCMeta, abstractmethod
 import logging
+
 try:
     from queue import Queue  # 3.x
 except ImportError:
@@ -11,40 +12,64 @@ from . import exc
 log = logging.getLogger(__name__)
 
 
-class BasePort(object):
-    pass
+class RuntimeTarget(object):
+    '''
+    Class that can have a Runtime injected into it after graph construction.
+    Runtimes implement scheduling behavior.
+    '''
+    __metaclass__ = ABCMeta
+
+    @property
+    def runtime(self):
+        if not hasattr(self, '_runtime'):
+            raise ValueError('runtime not initialized yet')
+
+        return self._runtime
+
+    @runtime.setter
+    def runtime(self, runtime):
+        if hasattr(self, '_runtime') and runtime != self._runtime:
+            raise ValueError('runtime can not be changed after being set')
+
+        self._runtime = runtime
+
+
+class BasePort(RuntimeTarget):
+    __metaclass__ = ABCMeta
 
 
 class Port(BasePort):
     __metaclass__ = ABCMeta
 
-    def __init__(self, name, optional=False, type_=str):
+    def __init__(self, name, description=None, optional=False, type_=str, auto_open=False):
         if not isinstance(name, basestring):
             raise ValueError('name must be a string')
 
         self.name = name
+        self.description = description
         self.optional = optional  # Is this port optional?
         self.type_ = type_  # Data type
+        self.auto_open = auto_open  # Is this port auto-opening?
 
-        self.sender = None  # Sending Component
-        self.receiver = None  # Receiving Component
-
-        self._buffer = Queue()  # TODO: This can be an mp.Queue() or a message queue depending on runtime
+        self.component = None  # Owning component
+        self.source_port = None
+        self.target_port = None
+        self._buffer = Queue()  # TODO: Delegate to runtime
         self._is_open = False
 
     def open(self):
         if not self.is_connected:
-            raise ValueError('You can not open a disconnected Port')
+            raise exc.PortError('Port "%s" is disconnected, and can not be opened' % self._port_name)
 
         if self._is_open:
-            raise ValueError('Port is already open')
+            raise exc.PortError('Port "%s" is already open' % self._port_name)
 
         self._is_open = True
         # TODO
 
     def close(self):
         if self._is_open:
-            raise ValueError('Port is already closed')
+            raise exc.PortError('Port "%s" is already closed' % self._port_name)
 
         self._is_open = False
 
@@ -52,13 +77,49 @@ class Port(BasePort):
     def is_open(self):
         return self.is_connected and self._is_open
 
+    def connect(self, target_port):
+        if not isinstance(target_port, Port):
+            raise ValueError('target_port must be a Port')
+
+        self.target_port = target_port
+
+        if target_port.source_port is not None:
+            raise exc.PortError('target_port is already connected to another source')
+
+        target_port.source_port = self
+
+        if self.auto_open:
+            log.debug('Port "%s" is being automatically opened...' % self._port_name)
+            self.open()
+
+    @property
     def is_connected(self):
-        return (self.sender is not None and
-                self.receiver is not None)
+        return (self.component is not None and
+                self.target_port is not None and
+                self.source_port is not None)
+
+    @property
+    def _port_name(self):
+        if self.component is not None:
+            component_name = self.component.name
+        else:
+            component_name = '(no_component)'
+
+        return '%s.%s' % (component_name, self.name)
 
     def _check_ready_state(self):
         if not self.is_open:
-            raise exc.PortClosedError
+            raise exc.PortClosedError('Port "%s" is closed' % self._port_name)
+
+    def __getitem__(self, index):
+        raise ValueError('Port "%s" is not an array port' % self._port_name)
+
+    def __iter__(self):
+        raise ValueError('Port "%s" is not an array port' % self._port_name)
+
+    def __str__(self):
+        return 'Port(%s%s)' % (self._port_name,
+                               '*' if self.optional else '')
 
 
 class InputPort(Port):
@@ -75,13 +136,20 @@ class InputPort(Port):
 
         :return: Packet that was received or None if EOF
         '''
-        self._check_ready_state()
+        # Optional port with no connection
+        if self.optional and not self.is_connected:
+            return None
+        else:
+            self._check_ready_state()
+
+        # TODO: yield execution
 
         # TODO: claim ownership
         # TODO: increment refcount
 
         log.debug('Receiving packet over port %s' % self.name)
-        raise NotImplementedError
+
+        #raise NotImplementedError
 
 
 class ArrayPort(BasePort):
@@ -145,6 +213,8 @@ class OutputPort(Port):
 
         log.debug('Sending packet over port %s' % self.name)
 
+        # TODO: yield execution
+
 
 class ArrayOutputPort(ArrayPort):
     @abstractmethod
@@ -175,7 +245,7 @@ class BracketPacket(Packet):
     '''
     Special packet used for bracketing.
     '''
-    pass
+    __metaclass__ = ABCMeta
 
 
 class StartBracket(BracketPacket):
@@ -192,12 +262,13 @@ class EndBracket(BracketPacket):
     pass
 
 
-class AddressablePorts(object):
+class ComponentPorts(object):
     '''
     Descriptor that allows addressing ports by name (as attributes).
     '''
-    def __init__(self, *required_superclasses):
+    def __init__(self, component, *required_superclasses):
         self._ports = {}
+        self._component = component
 
         if not all(map(lambda c: issubclass(c, BasePort), required_superclasses)):
             raise ValueError('required_superclass must be Port subclass')
@@ -206,16 +277,25 @@ class AddressablePorts(object):
 
     def add(self, port):
         if not isinstance(port, self._required_superclasses):
-            raise ValueError('port "%s" must be an instance of: %s' %
+            raise ValueError('Port "%s" must be an instance of: %s' %
                              (port.name, ', '.join([c.__name__ for c in self._required_superclasses])))
 
         if port.name in self._ports:
-            raise ValueError('port "%s" already exists' % port.name)
+            raise ValueError('Port "%s" already exists' % port.name)
 
+        if port.component is not None and port.component != self._component:
+            raise ValueError('Port "%s" is already attached to Component "%s"' %
+                             (port.name, port.component.name))
+
+        port.component = self._component
         self._ports[port.name] = port
+
         return self
 
     def __get__(self, port_name):
+        return self[port_name]
+
+    def __getitem__(self, port_name):
         if port_name not in self._ports:
             raise AttributeError('Component does not have a port named "%s"' %
                                  port_name)
@@ -224,6 +304,12 @@ class AddressablePorts(object):
 
     def __iter__(self):
         return iter(self._ports.values())
+
+    def __len__(self):
+        return len(self._ports)
+
+    def __str__(self):
+        return '(%s)' % ', '.join(map(str, self._ports.values()))
 
 
 class ComponentState(Enum):
@@ -234,7 +320,7 @@ class ComponentState(Enum):
     ERROR = 5
 
 
-class Component(object):
+class Component(RuntimeTarget):
     __metaclass__ = ABCMeta
 
     def __init__(self, name):
@@ -242,8 +328,8 @@ class Component(object):
             raise ValueError('name must be a string')
 
         self.name = name
-        self.inputs = AddressablePorts(InputPort, ArrayInputPort)
-        self.outputs = AddressablePorts(OutputPort, ArrayOutputPort)
+        self.inputs = ComponentPorts(self, InputPort, ArrayInputPort)
+        self.outputs = ComponentPorts(self, OutputPort, ArrayOutputPort)
         self.state = ComponentState.NOT_STARTED
         self.owned_packet_count = 0
         self.define()
@@ -266,6 +352,12 @@ class Component(object):
     @abstractmethod
     def run(self):
         pass
+
+    def create_packet(self, value=None):
+        packet = Packet(value)
+        packet.owner = self
+        self.owned_packet_count += 1
+        return packet
 
     def drop(self, packet):
         '''
@@ -298,8 +390,11 @@ class Component(object):
         '''
         log.debug('Component %s is going dormant...' % self.__class__.__name__)
         self.state = ComponentState.DORMANT
-        # TODO: Yield to scheduler or suspend thread
-        raise NotImplementedError
+        self.runtime.yield_control()
+
+    def __str__(self):
+        return ('Component(%s, inputs=%s, outputs=%s)' %
+                (self.name, self.inputs, self.outputs))
 
 
 class InitialPacketCreator(Component):
@@ -318,37 +413,40 @@ class InitialPacketCreator(Component):
         self.outputs.add(OutputPort('OUT'))
 
     def run(self):
-        self.outputs.OUT.send(Packet(self.value))
-
-
-class Connection(object):
-    '''
-    Connected edge in graph.
-
-    This should provide buffering between component ports.
-    '''
-    # TODO
-    pass
+        self.outputs['OUT'].send(Packet(self.value))
 
 
 class Graph(Component):
     __metaclass__ = ABCMeta
 
     def __init__(self, *args, **kwargs):
-        self.components = set()
-        self.ports = set()
+        self.components = set()  # Nodes
         super(Graph, self).__init__(*args, **kwargs)
 
-    def add_component(self, component):
-        self.components.add(component)
-
-        for port in component.inputs:
-            self.ports.add(port)
-
-        for port in component.outputs:
-            self.ports.add(port)
+    def add_component(self, *components):
+        for component in components:
+            self.components.add(component)
 
         return self
+
+    @property
+    def self_starters(self):
+        '''
+        Returns a set of all self-starter components.
+        '''
+        def input_port_valid(input_port):
+            return (input_port.optional and
+                    input_port.source_port is None)
+
+        self_starters = set()
+        for node in self.components:
+            # Self-starter nodes should have either no inputs or only have disconnected optional inputs
+            if len(node.inputs) == 0:
+                self_starters.add(node)
+            elif all(map(input_port_valid, node.inputs)):
+                self_starters.add(node)
+
+        return self_starters
 
     def run(self):
         self.validate()
@@ -379,14 +477,57 @@ class Graph(Component):
 
         return self
 
+    def write_graphml(self, file_path):
+        '''
+        Writes this Graph as a *.graphml file.
 
-class SubGraph(Graph):
-    '''
-    SubGraphs are just like Graphs but have slightly different run() semantics.
-    '''
-    __metaclass__ = ABCMeta
+        This is useful for debugging network configurations that are hard
+        to visualize purely with code.
 
-    def run(self):
-        # TODO:
-        pass
+        :param file_path: the file to write to (should have a .graphml extension)
+        '''
+        import networkx as nx
 
+        graph = nx.Graph()
+
+        def _build_nodes(components):
+            visited_nodes = set()
+
+            for component in components:
+                # Add node
+                if component not in visited_nodes:
+                    visited_nodes.add(component)
+                    graph.add_node(component.name)
+
+                graph.node[component.name]['label'] = component.name
+
+        def _build_edges(components, visited_nodes=None):
+            if visited_nodes is None:
+                visited_nodes = set()
+
+            if len(components) > 0:
+                next_components = set()
+
+                for component in components:
+                    if component in visited_nodes:
+                        continue
+
+                    for output in component.outputs:
+                        next_components.add(output.target_port.component)
+                        edge_attribs = {
+                            'label': '%s -> %s' % (output.name, output.target_port.name)
+                        }
+                        graph.add_edge(component.name,
+                                       output.target_port.component.name,
+                                       edge_attribs)
+
+                    visited_nodes.add(component)
+
+                _build_edges(next_components, visited_nodes)
+
+        log.debug('Building nx graph...')
+        _build_nodes(self.components)
+        _build_edges(self.components)
+
+        log.debug('Writing graph to "%s"...' % file_path)
+        nx.write_graphml(graph, file_path)
