@@ -87,7 +87,7 @@ class SingleThreadedRuntime(Runtime):
             # First run all self-starters...
             log.debug('Running all self-starter components...')
             for component in self_starters:
-                log.debug('Switch: %s' % component.name)
+                log.debug('Switch: %s (%s)' % (component.name, component.state))
                 component_threads[component].switch()
 
                 # TODO
@@ -97,12 +97,18 @@ class SingleThreadedRuntime(Runtime):
 
             # ...then run the rest of the graph
             log.debug('Running the rest of the graph...')
-            while not graph.is_terminated:
+            active_components = set(graph.components)
+            while len(active_components) > 0 and not graph.is_terminated:
                 #log.debug('Scheduler loop iteration!')
-                for component in graph.components:
-                    if not component.is_terminated:
+                for component in active_components:
+                    if component.is_terminated:
+                        # Deactivate terminated component
+                        log.debug('Removing terminated component "%s" from scheduler' % component.name)
+                        active_components.remove(component)
+                    else:
+                        # Context switch
                         # TODO: Determine if component has pending input data
-                        log.debug('Switch: %s' % component.name)
+                        log.debug('Switch: %s (%s)' % (component.name, component.state))
                         component_threads[component].switch()
 
             log.info('Graph execution has terminated')

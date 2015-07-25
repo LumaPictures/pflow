@@ -320,11 +320,11 @@ class ComponentPorts(object):
 
 
 class ComponentState(Enum):
-    NOT_STARTED = 1
-    ACTIVE = 2
-    DORMANT = 3
-    TERMINATED = 4
-    ERROR = 5
+    NOT_STARTED = 'NOT_STARTED'
+    ACTIVE = 'ACTIVE'
+    SUSPENDED = 'SUSPENDED'
+    TERMINATED = 'TERMINATED'
+    ERROR = 'ERROR'
 
 
 class Component(RuntimeTarget):
@@ -337,9 +337,19 @@ class Component(RuntimeTarget):
         self.name = name
         self.inputs = ComponentPorts(self, InputPort, ArrayInputPort)
         self.outputs = ComponentPorts(self, OutputPort, ArrayOutputPort)
-        self.state = ComponentState.NOT_STARTED
+        self._state = ComponentState.NOT_STARTED
         self.owned_packet_count = 0
         self.initialize()
+
+    @property
+    def state(self):
+        return self._state
+
+    @state.setter
+    def state(self, new_state):
+        log.debug('Component "%s" transition from %s -> %s' %
+                  (self.name, self._state, new_state))
+        self._state = new_state
 
     @property
     def upstream(self):
@@ -375,8 +385,9 @@ class Component(RuntimeTarget):
         pass
 
     def _run(self):
-        # TODO: Handle timeouts
+        self.state = ComponentState.ACTIVE
 
+        # TODO: Handle timeouts
         while not self.is_terminated:
 
             # TODO: Handle exceptions and set ERROR state
@@ -441,7 +452,10 @@ class Component(RuntimeTarget):
         self.runtime.yield_and_terminate()
 
     def suspend(self):
-        self.state = ComponentState.DORMANT
+        '''
+        Suspend execution.
+        '''
+        self.state = ComponentState.SUSPENDED
         self.runtime.yield_control()
 
     def yield_control(self):

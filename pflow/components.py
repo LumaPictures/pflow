@@ -151,7 +151,7 @@ class RandomNumberGenerator(Component):
         if seed_packet is not None:
             prng.seed(seed_packet.value)
 
-        for i in range(3):
+        while True:
             random_value = prng.randint(1, 100)
             log.debug('%s: Generated %d' % (self.name, random_value))
 
