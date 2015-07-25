@@ -16,6 +16,8 @@ internally. FBP is thus naturally component-oriented.
 
 ## How is this useful?
 
+Drag-and-drop programming!
+
 You can define data flow execution graphs where each process (node) is run in parallel. To define these graphs, you can
 use a GUI like [DrawFBP](https://github.com/jpaulm/drawfbp), [NoFlo UI](https://github.com/noflo/noflo-ui), 
 or [Flowhub](https://flowhub.io/).
