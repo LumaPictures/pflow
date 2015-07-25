@@ -459,6 +459,7 @@ class Graph(Component):
     def validate(self):
         log.debug('Validating graph...')
 
+        # TODO: ensure graph contains no components that aren't in self.components
         # TODO: validate all components
         # TODO: ensure all components are connected
         # TODO: ensure all edges have components

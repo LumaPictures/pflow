@@ -82,6 +82,19 @@ class Concat(Component):
             self.outputs['OUT'].send(packet)
 
 
+class Multiply(Component):
+    def define(self):
+        self.inputs.add(InputPort('X'))
+        self.inputs.add(InputPort('Y'))
+        self.outputs.add(OutputPort('OUT'))
+
+    def run(self):
+        x_packet = self.inputs['X'].receive()
+        y_packet = self.inputs['Y'].receive()
+        result_value = int(x_packet.value) * int(y_packet.value)
+        self.outputs['OUT'].send(result_value)
+
+
 class ConsoleLineWriter(Component):
     '''
     Writes everything from IN to the console.

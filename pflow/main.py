@@ -5,20 +5,24 @@ import argparse
 
 from . import graph
 from .runtime import GeventRuntime
-from .components import Graph, Repeat, RandomNumberGenerator, ConsoleLineWriter
+from .components import Graph, Repeat, RandomNumberGenerator, ConsoleLineWriter, Multiply
 
 log = logging.getLogger(__name__)
 
 
-class RandomNumberLogger(Graph):
+class SuperAwesomeDemoGraph(Graph):
     def define(self):
-        genner = RandomNumberGenerator('GEN_1')
-        repeater = Repeat('REPEAT_1')
+        gen1 = RandomNumberGenerator('GEN_1')
+        gen2 = RandomNumberGenerator('GEN_2')
+        mul = Multiply('MUL_1')
+        repeater = Repeat('RPT_1')
         logger = ConsoleLineWriter('LOG_1')
-        self.add_component(genner, repeater, logger)
+        self.add_component(gen1, gen2, mul, repeater, logger)
 
-        genner.outputs['OUT'].connect(repeater.inputs['IN'])
-        repeater.outputs['OUT'].connect(logger.inputs['IN'])
+        gen1.outputs['OUT'].connect(repeater.inputs['IN'])
+        repeater.outputs['OUT'].connect(mul.inputs['X'])
+        gen2.outputs['OUT'].connect(mul.inputs['Y'])
+        mul.outputs['OUT'].connect(logger.inputs['IN'])
 
 
 def main():
@@ -28,7 +32,7 @@ def main():
 
     log.info('Initializing graph...')
 
-    g = RandomNumberLogger('RND_NUM_LOG')
+    g = SuperAwesomeDemoGraph('AWESOME_1')
     g.write_graphml('demo.graphml')
 
     rt = GeventRuntime()
