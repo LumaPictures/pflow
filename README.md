@@ -12,7 +12,7 @@ data across predefined connections by message passing, where the connections are
 These black box processes can be reconnected endlessly to form different applications without having to be changed 
 internally. FBP is thus naturally component-oriented.
 
-![Flow-based programming example](./docs/fbp-example.png)
+![Flow-based programming example](./docs/fbp-example.jpg)
 
 ## How is this useful?
 
