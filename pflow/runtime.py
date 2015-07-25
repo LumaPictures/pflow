@@ -19,8 +19,7 @@ log = logging.getLogger(__name__)
 
 
 # TODO: Implement FBP Network Protocol - http://noflojs.org/documentation/protocol/
-# TODO: Implement message queue support for Connection class (see msgflo-python)
-# Scheduling - http://www.jpaulmorrison.com/fbp/schedrls.shtml
+# TODO: Scheduling - http://www.jpaulmorrison.com/fbp/schedrls.shtml
 
 
 class Runtime(object):
@@ -38,11 +37,11 @@ class Runtime(object):
         pass
 
     @abstractmethod
-    def send(self, packet, source_port, dest_port):
+    def send(self, packet, dest_port):
         pass
 
     @abstractmethod
-    def receive(self, source_port, dest_port):
+    def receive(self, source_port):
         pass
 
     @abstractmethod
@@ -57,7 +56,8 @@ class GeventRuntime(Runtime):
     '''
     Processes are are cooperatively multitasked using gevent run in a single thread.
 
-    Their execution is only suspended upon finishing a unit of work and yielding.
+    Uses a queue.Queue for Packet buffering.
+    Execution is only suspended upon finishing a unit of work and yielding.
     '''
     _gevent_patched = False
     _port_buffers = {}  # Buffers for edges, keyed by (source_port, dest_port) tuples.
@@ -78,10 +78,10 @@ class GeventRuntime(Runtime):
                 if isinstance(output, ArrayPort):
                     raise NotImplementedError('ArrayPort not implemented yet')
 
-    def send(self, packet, source_port, dest_port):
+    def send(self, packet, dest_port):
         raise NotImplementedError
 
-    def receive(self, source_port, dest_port):
+    def receive(self, source_port):
         raise NotImplementedError
 
     def yield_control(self):
@@ -101,52 +101,13 @@ class GeventRuntime(Runtime):
             cls._gevent_patched = True
 
 
-# class LocalQueueConnection(Connection):
-#     '''
-#     Connection that uses a simple queue.Queue.
-#
-#     This is the easiest implementation and works well with the GeventScheduler.
-#     '''
-#     pass
-#
-#
 # class MultiProcessRuntime(Runtime):
 #     '''
 #     Processes are preemtively multitasked, since each is a multiprocessing.Process.
 #
-#     Their execution is suspended in one of these cases:
+#     Uses either a multiprocessing.Queue or a distributed message queue for Packet buffering.
+#     Execution is suspended in one of these cases:
 #         1) Yielded to scheduler after finishing a unit of work.
 #         2) OS kernel preempts another running process.
-#     '''
-#     pass
-#
-#
-# class MultiProcessQueueConnection(Connection):
-#     '''
-#     Connection that uses a multiprocessing.Queue.
-#
-#     This is necessary for the MultiProcessScheduler, since a regular queue
-#     can not be shared between processes.
-#     '''
-#     pass
-#
-#
-# class AMQPConnection(Connection):
-#     '''
-#     Connection that uses an AMQP message exchange/queue.
-#
-#     This is necessary when packets need to be distributed across multiple
-#     machines, but can also be used for multiple Processes on a single server.
-#     '''
-#     pass
-#
-#
-# class ZMQConnection(Connection):
-#     '''
-#     Connection that uses a ZeroMQ message queue.
-#
-#     This is an experimental POC, but should have higher throughput than the
-#     AMQPConnection since it's lower level doesn't have to forward all messages
-#     through a central broker.
 #     '''
 #     pass
