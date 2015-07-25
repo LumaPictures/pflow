@@ -33,7 +33,7 @@ class Runtime(object):
     @abstractmethod
     def execute_graph(self, graph):
         '''
-        Initialize a graph into an instance and execute it.
+        Executes a graph by multitasking all component processes and moving messages along queues.
         '''
         pass
 
@@ -98,7 +98,7 @@ class SingleThreadedRuntime(Runtime):
             # ...then run the rest of the graph
             log.debug('Running the rest of the graph...')
             active_components = set(graph.components)
-            while len(active_components) > 0 and not graph.is_terminated:
+            while len(active_components) > 0:
                 #log.debug('Scheduler loop iteration!')
                 for component in active_components:
                     if component.is_terminated:

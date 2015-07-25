@@ -22,14 +22,14 @@ class RuntimeTarget(object):
     @property
     def runtime(self):
         if not hasattr(self, '_runtime'):
-            raise ValueError('runtime not initialized yet')
+            raise ValueError('You need to run this graph through a Runtime.')
 
         return self._runtime
 
     @runtime.setter
     def runtime(self, runtime):
         if hasattr(self, '_runtime') and runtime != self._runtime:
-            raise ValueError('runtime can not be changed after being set')
+            raise ValueError('Runtime can not be changed. Please re-create the graph.')
 
         self._runtime = runtime
 
@@ -154,7 +154,7 @@ class InputPort(Port):
         # TODO: claim ownership
         # TODO: increment refcount
 
-        log.debug('Receiving packet over port %s' % self.name)
+        log.debug('Receiving packet from InputPort %s' % self._port_name)
 
         #raise NotImplementedError
 
@@ -218,7 +218,7 @@ class OutputPort(Port):
 
         # TODO: decrement refcount
 
-        log.debug('Sending packet over port %s' % self.name)
+        log.debug('Sending packet to OutputPort "%s"' % self._port_name)
 
         # TODO: yield execution
 
@@ -269,9 +269,9 @@ class EndBracket(BracketPacket):
     pass
 
 
-class ComponentPorts(object):
+class PortRegistry(object):
     '''
-    Descriptor that allows addressing ports by name (as attributes).
+    Per-component port registry descriptor.
     '''
     def __init__(self, component, *required_superclasses):
         self._ports = {}
@@ -283,6 +283,9 @@ class ComponentPorts(object):
         self._required_superclasses = required_superclasses
 
     def add(self, port):
+        '''
+        Add a new port to the registry.
+        '''
         if not isinstance(port, self._required_superclasses):
             raise ValueError('Port "%s" must be an instance of: %s' %
                              (port.name, ', '.join([c.__name__ for c in self._required_superclasses])))
@@ -299,10 +302,10 @@ class ComponentPorts(object):
 
         return self
 
-    def __get__(self, port_name):
-        return self[port_name]
-
     def __getitem__(self, port_name):
+        '''
+        Get a port from the registry by name (using [] notation).
+        '''
         if port_name not in self._ports:
             raise AttributeError('Component does not have a port named "%s"' %
                                  port_name)
@@ -320,14 +323,35 @@ class ComponentPorts(object):
 
 
 class ComponentState(Enum):
+
+    # Initial component state before it receives first packet.
     NOT_STARTED = 'NOT_STARTED'
+
+    # Component should still be ACTIVEly receiving data.
     ACTIVE = 'ACTIVE'
+
+    # Component processed last data item and is SUSPENDED.
+    # until the next packet arrives.
     SUSPENDED = 'SUSPENDED'
+
+    # Component has either TERMINATED itself or has processed
+    # the last packet. This component is automatically considered
+    # TERMINATED it: 1) has no more data to process, and 2) all its
+    # upstream components are TERMINATED.
     TERMINATED = 'TERMINATED'
+
+    # Component has been TERMINATED with an ERROR status. This can
+    # happen when an unexpected exception is raised.
     ERROR = 'ERROR'
 
 
 class Component(RuntimeTarget):
+    '''
+    Component instances are "process" nodes in a flow-based digraph.
+
+    Each Component has zero or more input and output ports, which are
+    connected to other Components through Ports.
+    '''
     __metaclass__ = ABCMeta
 
     def __init__(self, name):
@@ -335,8 +359,8 @@ class Component(RuntimeTarget):
             raise ValueError('name must be a string')
 
         self.name = name
-        self.inputs = ComponentPorts(self, InputPort, ArrayInputPort)
-        self.outputs = ComponentPorts(self, OutputPort, ArrayOutputPort)
+        self.inputs = PortRegistry(self, InputPort, ArrayInputPort)
+        self.outputs = PortRegistry(self, OutputPort, ArrayOutputPort)
         self._state = ComponentState.NOT_STARTED
         self.owned_packet_count = 0
         self.initialize()
@@ -347,9 +371,14 @@ class Component(RuntimeTarget):
 
     @state.setter
     def state(self, new_state):
-        log.debug('Component "%s" transition from %s -> %s' %
-                  (self.name, self._state, new_state))
+        # TODO: Prevent invalid transitions
+        # TODO: Fire a transition event
+
+        old_state = self._state
         self._state = new_state
+
+        log.debug('Component "%s" transitioned from %s -> %s' %
+                  (self.name, old_state, new_state))
 
     @property
     def upstream(self):
@@ -385,6 +414,10 @@ class Component(RuntimeTarget):
         pass
 
     def _run(self):
+        '''
+        This method is called by the scheduler.
+        It will then invoke run()
+        '''
         self.state = ComponentState.ACTIVE
 
         # TODO: Handle timeouts
@@ -443,6 +476,10 @@ class Component(RuntimeTarget):
                               ComponentState.ERROR)
 
     def terminate(self):
+        '''
+        Terminate execution for this component.
+        This will not terminate upstream components!
+        '''
         if self.is_terminated:
             raise ValueError('Component "%s" is already terminated' % self.name)
 
@@ -470,7 +507,7 @@ class Component(RuntimeTarget):
                 (self.name, self.inputs, self.outputs))
 
 
-class InitialPacketCreator(Component):
+class InitialPacketGenerator(Component):
     '''
     An initial packet (IIP) generator that is connected to an input port
     of a component.
@@ -480,7 +517,7 @@ class InitialPacketCreator(Component):
     '''
     def __init__(self, value):
         self.value = value
-        super(InitialPacketCreator, self).__init__('IIP_GEN')
+        super(InitialPacketGenerator, self).__init__('IIP_GEN')
 
     def initialize(self):
         self.outputs.add(OutputPort('OUT'))
@@ -490,6 +527,11 @@ class InitialPacketCreator(Component):
 
 
 class Graph(Component):
+    '''
+    Execution graph.
+
+    This can also be used as a subgraph for composite components.
+    '''
     __metaclass__ = ABCMeta
 
     def __init__(self, *args, **kwargs):
@@ -507,7 +549,8 @@ class Graph(Component):
         '''
         Returns a set of all self-starter components.
         '''
-        def input_port_valid(input_port):
+        # Has only disconnected optional inputs
+        def is_self_starter_input(input_port):
             return (input_port.optional and
                     input_port.source_port is None)
 
@@ -515,8 +558,9 @@ class Graph(Component):
         for node in self.components:
             # Self-starter nodes should have either no inputs or only have disconnected optional inputs
             if len(node.inputs) == 0:
+                # No inputs
                 self_starters.add(node)
-            elif all(map(input_port_valid, node.inputs)):
+            elif all(map(is_self_starter_input, node.inputs)):
                 self_starters.add(node)
 
         return self_starters
