@@ -8,6 +8,7 @@ except ImportError:
     from Queue import Queue  # 2.x
 
 import gevent
+import greenlet
 import haigha as amqp
 
 from . import exc
@@ -52,31 +53,63 @@ class Runtime(object):
         pass
 
 
-class GeventRuntime(Runtime):
+class SingleThreadedRuntime(Runtime):
     '''
-    Processes are are cooperatively multitasked using gevent run in a single thread.
+    Processes are are cooperatively multitasked using gevent and run in a single thread.
 
     Uses a queue.Queue for Packet buffering.
     Execution is only suspended upon finishing a unit of work and yielding.
     '''
     _gevent_patched = False
-    _port_buffers = {}  # Buffers for edges, keyed by (source_port, dest_port) tuples.
 
     def __init__(self):
         self.gevent_monkey_patch()
 
     def execute_graph(self, graph):
+        # Wire up runtime dependency to all components
+        for component in graph.components:
+            component.runtime = self
+
+        # Find all self-starter components in the graph
         self_starters = graph.self_starters
         if len(self_starters) == 0:
             raise exc.FlowError('Unable to find any self-starter Components in graph')
+        else:
+            log.info('Self-starter components are: %s' % ', '.join([c.name for c in self_starters]))
 
-        log.info('Self-starter components are: %s' % self_starters)
+        # TODO: Switch from greenlets to gevent so that lower level I/O calls won't block
 
-        for component in self_starters:
-            component._run()
-            for output in component.outputs:
-                if isinstance(output, ArrayPort):
-                    raise NotImplementedError('ArrayPort not implemented yet')
+        def scheduler():
+            scheduler_thread = greenlet.getcurrent()
+            component_threads = dict([(component, greenlet.greenlet(component._run, scheduler_thread))
+                                        for component in graph.components])
+
+            # First run all self-starters...
+            log.debug('Running all self-starter components...')
+            for component in self_starters:
+                log.debug('Switch: %s' % component.name)
+                component_threads[component].switch()
+
+                # TODO
+                for output in component.outputs:
+                    if isinstance(output, ArrayPort):
+                        raise NotImplementedError('ArrayPort not implemented yet')
+
+            # ...then run the rest of the graph
+            log.debug('Running the rest of the graph...')
+            while not graph.is_terminated:
+                #log.debug('Scheduler loop iteration!')
+                for component in graph.components:
+                    if not component.is_terminated:
+                        # TODO: Determine if component has pending input data
+                        log.debug('Switch: %s' % component.name)
+                        component_threads[component].switch()
+
+            log.info('Graph execution has terminated')
+
+        # Start the scheduler
+        log.debug('Starting the scheduler...')
+        greenlet.greenlet(scheduler).switch()
 
     def send(self, packet, dest_port):
         raise NotImplementedError
@@ -84,8 +117,12 @@ class GeventRuntime(Runtime):
     def receive(self, source_port):
         raise NotImplementedError
 
+    def yield_and_terminate(self):
+        raise greenlet.GreenletExit
+
     def yield_control(self):
-        gevent.sleep()
+        # Switch back to the scheduler greenlet
+        greenlet.getcurrent().parent.switch()
 
     @classmethod
     def gevent_monkey_patch(cls):

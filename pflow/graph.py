@@ -34,14 +34,14 @@ class RuntimeTarget(object):
         self._runtime = runtime
 
 
-class BasePort(RuntimeTarget):
+class BasePort(object):
     __metaclass__ = ABCMeta
 
 
 class Port(BasePort):
     __metaclass__ = ABCMeta
 
-    def __init__(self, name, description=None, optional=False, type_=str, auto_open=False):
+    def __init__(self, name, description=None, optional=False, type_=str, auto_open=True):
         if not isinstance(name, basestring):
             raise ValueError('name must be a string')
 
@@ -59,7 +59,8 @@ class Port(BasePort):
 
     def open(self):
         if not self.is_connected:
-            raise exc.PortError('Port "%s" is disconnected, and can not be opened' % self._port_name)
+            raise exc.PortError('Port "%s" is disconnected (%s, %s, %s), and can not be opened' %
+                                (self._port_name, self.component, self.target_port, self.source_port))
 
         if self._is_open:
             raise exc.PortError('Port "%s" is already open' % self._port_name)
@@ -78,25 +79,31 @@ class Port(BasePort):
         return self.is_connected and self._is_open
 
     def connect(self, target_port):
+        '''
+        Connect this Port to an InputPort
+        '''
         if not isinstance(target_port, Port):
             raise ValueError('target_port must be a Port')
-
-        self.target_port = target_port
 
         if target_port.source_port is not None:
             raise exc.PortError('target_port is already connected to another source')
 
+        self.target_port = target_port
         target_port.source_port = self
 
+        log.debug('Port "%s.%s" connected to "%s.%s"' %
+                  (self.component.name, self.name,
+                   target_port.component.name, target_port.name))
+
         if self.auto_open:
-            log.debug('Port "%s" is being automatically opened...' % self._port_name)
+            log.debug('Opening Port "%s" (auto)' % self._port_name)
             self.open()
 
     @property
     def is_connected(self):
         return (self.component is not None and
-                self.target_port is not None and
-                self.source_port is not None)
+                self.target_port is not None)
+                #self.source_port is not None)
 
     @property
     def _port_name(self):
@@ -332,10 +339,36 @@ class Component(RuntimeTarget):
         self.outputs = ComponentPorts(self, OutputPort, ArrayOutputPort)
         self.state = ComponentState.NOT_STARTED
         self.owned_packet_count = 0
-        self.define()
+        self.initialize()
+
+    @property
+    def upstream(self):
+        '''
+        Immediate upstream components.
+        '''
+        upstream = set()
+
+        for port in self.inputs:
+            if port.is_connected:
+                upstream.add(port.source_port.component)
+
+        return upstream
+
+    @property
+    def downstream(self):
+        '''
+        Immediate downstream components.
+        '''
+        downstream = set()
+
+        for port in self.outputs:
+            if port.is_connected:
+                downstream.add(port.target_port.component)
+
+        return downstream
 
     @abstractmethod
-    def define(self):
+    def initialize(self):
         '''
         Initialization code necessary to define this component.
         '''
@@ -343,14 +376,25 @@ class Component(RuntimeTarget):
 
     def _run(self):
         # TODO: Handle timeouts
-        while self.state not in (ComponentState.TERMINATED,
-                                 ComponentState.ERROR):
+
+        while not self.is_terminated:
+
+            # TODO: Handle exceptions and set ERROR state
             self.run()
-            self.yield_control()
-            # TODO: Check if component is still runnable (has non-terminated parents)
+
+            # Ensure this component is still in running condition
+            if all([component.is_terminated for component in self.upstream]):
+                # No more packets will ever arrive!
+                self.terminate()
+            else:
+                # More data may arrive
+                self.yield_control()
 
     @abstractmethod
     def run(self):
+        '''
+        This method is called any time the port is open and a new Packet arrives.
+        '''
         pass
 
     def create_packet(self, value=None):
@@ -371,7 +415,7 @@ class Component(RuntimeTarget):
         Raises a FlowError if there was a problem.
         '''
         # raise exc.FlowError, 'This component is invalid!'
-        log.debug('Validating component %s...' % self.__class__.__name__)
+        log.debug('Validating component "%s"...' % self.name)
 
         # TODO: Ensure there's at least 1 port defined
         # TODO: Ensure all ports are connected
@@ -379,17 +423,32 @@ class Component(RuntimeTarget):
 
         return self
 
+    @property
+    def is_terminated(self):
+        '''
+        Has this component been terminated?
+        '''
+        return self.state in (ComponentState.TERMINATED,
+                              ComponentState.ERROR)
+
     def terminate(self):
-        log.debug('Terminating component %s...' % self.__class__.__name__)
+        if self.is_terminated:
+            raise ValueError('Component "%s" is already terminated' % self.name)
+
+        log.debug('Component "%s" is terminating...' % self.name)
         self.state = ComponentState.TERMINATED
-        raise NotImplementedError
+
+        self.runtime.yield_and_terminate()
+
+    def suspend(self):
+        self.state = ComponentState.DORMANT
+        self.runtime.yield_control()
 
     def yield_control(self):
         '''
         Yield execution to scheduler.
         '''
-        log.debug('Component %s is going dormant...' % self.__class__.__name__)
-        self.state = ComponentState.DORMANT
+        log.debug('Component "%s" is yielding...' % self.name)
         self.runtime.yield_control()
 
     def __str__(self):
@@ -409,7 +468,7 @@ class InitialPacketCreator(Component):
         self.value = value
         super(InitialPacketCreator, self).__init__('IIP_GEN')
 
-    def define(self):
+    def initialize(self):
         self.outputs.add(OutputPort('OUT'))
 
     def run(self):
@@ -456,6 +515,13 @@ class Graph(Component):
 
         pass
 
+    @property
+    def is_terminated(self):
+        '''
+        Has this graph been terminated?
+        '''
+        return all([component.is_terminated for component in self.components])
+
     def validate(self):
         log.debug('Validating graph...')
 
@@ -463,6 +529,7 @@ class Graph(Component):
         # TODO: validate all components
         # TODO: ensure all components are connected
         # TODO: ensure all edges have components
+        # TODO: warn if there's potential deadlocks
 
         return self
 

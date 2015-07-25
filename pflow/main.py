@@ -4,14 +4,14 @@ import logging
 import argparse
 
 from . import graph
-from .runtime import GeventRuntime
+from .runtime import SingleThreadedRuntime
 from .components import Graph, Repeat, RandomNumberGenerator, ConsoleLineWriter, Multiply
 
 log = logging.getLogger(__name__)
 
 
 class SuperAwesomeDemoGraph(Graph):
-    def define(self):
+    def initialize(self):
         gen1 = RandomNumberGenerator('GEN_1')
         gen2 = RandomNumberGenerator('GEN_2')
         mul = Multiply('MUL_1')
@@ -35,7 +35,7 @@ def main():
     g = SuperAwesomeDemoGraph('AWESOME_1')
     g.write_graphml('demo.graphml')
 
-    rt = GeventRuntime()
+    rt = SingleThreadedRuntime()
     rt.execute_graph(g)
 
 

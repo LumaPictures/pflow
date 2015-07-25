@@ -11,7 +11,7 @@ class Repeat(Component):
     '''
     Repeats inputs from IN to OUT
     '''
-    def define(self):
+    def initialize(self):
         self.inputs.add(InputPort('IN'))
         self.outputs.add(OutputPort('OUT'))
 
@@ -26,7 +26,7 @@ class Drop(Component):
 
     This component is a sink that acts like /dev/null
     '''
-    def define(self):
+    def initialize(self):
         self.inputs.add(InputPort('IN'))
 
     def run(self):
@@ -39,7 +39,7 @@ class Sleep(Component):
     Repeater that sleeps for DELAY seconds before
     repeating inputs from IN to OUT.
     '''
-    def define(self):
+    def initialize(self):
         self.inputs.add(InputPort('IN'))
         self.inputs.add(InputPort('DELAY',
                                   type_=int,
@@ -58,7 +58,7 @@ class Split(Component):
     '''
     Splits inputs from IN to OUT[]
     '''
-    def define(self):
+    def initialize(self):
         self.inputs.add(InputPort('IN'))
         self.outputs.add(ArrayOutputPort('OUT', 10))
 
@@ -72,7 +72,7 @@ class Concat(Component):
     '''
     Concatenates inputs from IN[] into OUT
     '''
-    def define(self):
+    def initialize(self):
         self.inputs.add(ArrayInputPort('IN', 10))
         self.outputs.add(OutputPort('OUT'))
 
@@ -83,7 +83,7 @@ class Concat(Component):
 
 
 class Multiply(Component):
-    def define(self):
+    def initialize(self):
         self.inputs.add(InputPort('X'))
         self.inputs.add(InputPort('Y'))
         self.outputs.add(OutputPort('OUT'))
@@ -101,7 +101,7 @@ class ConsoleLineWriter(Component):
 
     This component is a sink.
     '''
-    def define(self):
+    def initialize(self):
         self.inputs.add(InputPort('IN'))
 
     def run(self):
@@ -114,7 +114,7 @@ class LogTap(Graph):
     Taps an input stream by receiving inputs from IN, sending them
     to the console log, and forwarding them to OUT.
     '''
-    def define(self):
+    def initialize(self):
         self.inputs.add(InputPort('IN'))
         self.outputs.add(OutputPort('OUT'))
 
@@ -135,7 +135,7 @@ class RandomNumberGenerator(Component):
 
     This component is a generator.
     '''
-    def define(self):
+    def initialize(self):
         self.inputs.add(InputPort('SEED',
                                   type_=int,
                                   optional=True,
@@ -151,9 +151,10 @@ class RandomNumberGenerator(Component):
         if seed_packet is not None:
             prng.seed(seed_packet.value)
 
-        while True:
+        for i in range(3):
             random_value = prng.randint(1, 100)
-            log.debug('Generated %d' % random_value)
+            log.debug('%s: Generated %d' % (self.name, random_value))
 
             packet = self.create_packet(random_value)
             self.outputs['OUT'].send(packet)
+            self.yield_control()
