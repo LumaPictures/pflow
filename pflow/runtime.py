@@ -12,9 +12,9 @@ import greenlet
 import haigha as amqp
 
 from . import exc
-from .graph import Component, \
-    InputPort, OutputPort, \
-    ArrayPort, ArrayInputPort, ArrayOutputPort
+from .graph import Component
+from .port import InputPort, OutputPort, \
+                  ArrayPort, ArrayInputPort, ArrayOutputPort
 
 log = logging.getLogger(__name__)
 
@@ -46,9 +46,17 @@ class Runtime(object):
         pass
 
     @abstractmethod
-    def yield_control(self):
+    def terminate_thread(self):
         '''
-        Yield this thread's control to the scheduler.
+        Terminate this thread.
+        It will no longer process packets.
+        '''
+        pass
+
+    @abstractmethod
+    def suspend_thread(self):
+        '''
+        Suspend execution of this thread until the next packet arrives.
         '''
         pass
 
@@ -75,7 +83,8 @@ class SingleThreadedRuntime(Runtime):
         if len(self_starters) == 0:
             raise exc.FlowError('Unable to find any self-starter Components in graph')
         else:
-            log.info('Self-starter components are: %s' % ', '.join([c.name for c in self_starters]))
+            log.info('Self-starter components are: %s' %
+                     ', '.join([c.name for c in self_starters]))
 
         # TODO: Switch from greenlets to gevent so that lower level I/O calls won't block
 
@@ -123,10 +132,10 @@ class SingleThreadedRuntime(Runtime):
     def receive(self, source_port):
         raise NotImplementedError
 
-    def yield_and_terminate(self):
+    def terminate_thread(self):
         raise greenlet.GreenletExit
 
-    def yield_control(self):
+    def suspend_thread(self):
         # Switch back to the scheduler greenlet
         greenlet.getcurrent().parent.switch()
 
