@@ -367,18 +367,23 @@ class Graph(Component):
         '''
         import networkx as nx
 
-        graph = nx.Graph()
+        graph = nx.DiGraph()
 
         def _build_nodes(components):
             visited_nodes = set()
 
             for component in components:
-                # Add node
                 if component not in visited_nodes:
                     visited_nodes.add(component)
                     graph.add_node(component.name)
 
-                graph.node[component.name]['label'] = component.name
+                node_attribs = {
+                    'label': '%s\n(%s)' % (component.name,
+                                           component.__class__.__name__),
+                    'description': (component.__class__.__doc__ or '')
+                }
+
+                graph.node[component.name].update(node_attribs)
 
         def _build_edges(components, visited_nodes=None):
             if visited_nodes is None:
@@ -393,9 +398,13 @@ class Graph(Component):
 
                     for output in component.outputs:
                         next_components.add(output.target_port.component)
+
                         edge_attribs = {
-                            'label': '%s -> %s' % (output.name, output.target_port.name)
+                            'label': '%s -> %s' % (output.name,
+                                                   output.target_port.name),
+                            'description': (output.description or '')
                         }
+
                         graph.add_edge(component.name,
                                        output.target_port.component.name,
                                        edge_attribs)
