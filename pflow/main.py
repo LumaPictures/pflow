@@ -4,6 +4,7 @@ import logging
 import argparse
 
 from . import graph
+from .graph import InitialPacketGenerator
 from .runtime import SingleThreadedRuntime
 from .components import Graph, Repeat, RandomNumberGenerator, ConsoleLineWriter, Multiply
 
@@ -12,12 +13,19 @@ log = logging.getLogger(__name__)
 
 class SuperAwesomeDemoGraph(Graph):
     def initialize(self):
+        seed = InitialPacketGenerator(42)
+        limit = InitialPacketGenerator(3)
+
         gen1 = RandomNumberGenerator('GEN_1')
+        seed.outputs['OUT'].connect(gen1.inputs['SEED'])
+        limit.outputs['OUT'].connect(gen1.inputs['LIMIT'])
+
         gen2 = RandomNumberGenerator('GEN_2')
+
         mul = Multiply('MUL_1')
         repeater = Repeat('RPT_1')
         logger = ConsoleLineWriter('LOG_1')
-        self.add_component(gen1, gen2, mul, repeater, logger)
+        self.add_component(seed, limit, gen1, gen2, mul, repeater, logger)
 
         gen1.outputs['OUT'].connect(repeater.inputs['IN'])
         repeater.outputs['OUT'].connect(mul.inputs['X'])

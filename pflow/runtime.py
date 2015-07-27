@@ -1,11 +1,12 @@
 import logging
+import collections
 import multiprocessing as mp
 from abc import ABCMeta, abstractmethod
 
 try:
-    from queue import Queue  # 3.x
+    import queue  # 3.x
 except ImportError:
-    from Queue import Queue  # 2.x
+    import Queue as queue  # 2.x
 
 import gevent
 import greenlet
@@ -72,6 +73,7 @@ class SingleThreadedRuntime(Runtime):
 
     def __init__(self):
         self.gevent_monkey_patch()
+        self._recv_queues = collections.defaultdict(queue.Queue)
 
     def execute_graph(self, graph):
         # Wire up runtime dependency to all components
@@ -96,7 +98,7 @@ class SingleThreadedRuntime(Runtime):
             # First run all self-starters...
             log.debug('Running all self-starter components...')
             for component in self_starters:
-                log.debug('Switch: %s (%s)' % (component.name, component.state))
+                log.debug('Switch: %s' % component.name)
                 component_threads[component].switch()
 
                 # TODO
@@ -108,8 +110,7 @@ class SingleThreadedRuntime(Runtime):
             log.debug('Running the rest of the graph...')
             active_components = set(graph.components)
             while len(active_components) > 0:
-                #log.debug('Scheduler loop iteration!')
-                for component in active_components:
+                for component in set(active_components):
                     if component.is_terminated:
                         # Deactivate terminated component
                         log.debug('Removing terminated component "%s" from scheduler' % component.name)
@@ -117,7 +118,7 @@ class SingleThreadedRuntime(Runtime):
                     else:
                         # Context switch
                         # TODO: Determine if component has pending input data
-                        log.debug('Switch: %s (%s)' % (component.name, component.state))
+                        log.debug('Switch: %s' % component.name)
                         component_threads[component].switch()
 
             log.info('Graph execution has terminated')
@@ -127,10 +128,19 @@ class SingleThreadedRuntime(Runtime):
         greenlet.greenlet(scheduler).switch()
 
     def send(self, packet, dest_port):
-        raise NotImplementedError
+        q = self._recv_queues[dest_port]
+        q.put(packet)
 
     def receive(self, source_port):
-        raise NotImplementedError
+        q = self._recv_queues[source_port]
+        while True:
+            try:
+                packet = q.get(block=False)
+                log.debug('Received packet on %s' % source_port)
+                return packet
+            except queue.Empty:
+                log.debug('Suspending receive on %s' % source_port)
+                self.suspend_thread()
 
     def terminate_thread(self):
         raise greenlet.GreenletExit
@@ -159,7 +169,7 @@ class SingleThreadedRuntime(Runtime):
 #
 #     Uses either a multiprocessing.Queue or a distributed message queue for Packet buffering.
 #     Execution is suspended in one of these cases:
-#         1) Yielded to scheduler after finishing a unit of work.
+#         1) suspend_thread() is called
 #         2) OS kernel preempts another running process.
 #     '''
 #     pass

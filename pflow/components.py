@@ -91,8 +91,9 @@ class Multiply(Component):
     def run(self):
         x_packet = self.inputs['X'].receive()
         y_packet = self.inputs['Y'].receive()
-        result_value = int(x_packet.value) * int(y_packet.value)
-        self.outputs['OUT'].send(result_value)
+        result = self.create_packet(int(x_packet.value) * int(y_packet.value))
+        log.debug('Multiply %s * %s = %d' % (x_packet.value, y_packet.value, result.value))
+        self.outputs['OUT'].send(result)
 
 
 class ConsoleLineWriter(Component):
@@ -140,6 +141,10 @@ class RandomNumberGenerator(Component):
                                   type_=int,
                                   optional=True,
                                   description='Seed value for PRNG'))
+        self.inputs.add(InputPort('LIMIT',
+                                  type_=int,
+                                  optional=True,
+                                  description='Number of times to iterate (default: infinite)'))
         self.outputs.add(OutputPort('OUT'))
 
     def run(self):
@@ -151,10 +156,24 @@ class RandomNumberGenerator(Component):
         if seed_packet is not None:
             prng.seed(seed_packet.value)
 
+        limit_packet = self.inputs['LIMIT'].receive()
+        if limit_packet is not None:
+            limit = limit_packet.value
+            log.debug('%s: Limiting to %d' % (self.name, limit))
+        else:
+            log.debug('%s: Unlimited' % self.name)
+            limit = None
+
+        i = 0
         while True:
             random_value = prng.randint(1, 100)
             log.debug('%s: Generated %d' % (self.name, random_value))
 
             packet = self.create_packet(random_value)
             self.outputs['OUT'].send(packet)
-            self.yield_control()
+            self.suspend()
+
+            if limit is not None:
+                i += 1
+                if i == limit:
+                    break

@@ -33,7 +33,7 @@ class Port(BasePort):
         self.source_port = None
         self.target_port = None
         self._buffer = Queue()  # TODO: Delegate to runtime
-        self._is_open = False
+        self._is_open = True
 
     def open(self):
         if not self.is_connected:
@@ -54,7 +54,7 @@ class Port(BasePort):
 
     @property
     def is_open(self):
-        return self.is_connected and self._is_open
+        return self._is_open
 
     def connect(self, target_port):
         '''
@@ -73,15 +73,18 @@ class Port(BasePort):
                   (self.component.name, self.name,
                    target_port.component.name, target_port.name))
 
-        if self.auto_open:
-            log.debug('Opening Port "%s" (auto)' % self._port_name)
-            self.open()
+        # if self.auto_open:
+        #     log.debug('Opening Port "%s" (auto)' % self._port_name)
+        #     self.open()
 
     @property
     def is_connected(self):
-        return (self.component is not None and
-                self.target_port is not None)
-        #self.source_port is not None)
+        if self.component is None:
+            return False
+        elif isinstance(self, InputPort):
+            return self.source_port is not None
+        elif isinstance(self, OutputPort):
+            return self.target_port is not None
 
     @property
     def _port_name(self):
@@ -93,6 +96,8 @@ class Port(BasePort):
         return '%s.%s' % (component_name, self.name)
 
     def _check_ready_state(self):
+        if not self.is_connected and not self.optional:
+            raise exc.PortError('Port "%s" must be connected' % self._port_name)
         if not self.is_open:
             raise exc.PortClosedError('Port "%s" is closed' % self._port_name)
 
@@ -103,8 +108,9 @@ class Port(BasePort):
         raise ValueError('Port "%s" is not an array port' % self._port_name)
 
     def __str__(self):
-        return 'Port(%s%s)' % (self._port_name,
-                               '*' if self.optional else '')
+        return '%s(%s%s)' % (self.__class__.__name__,
+                             self._port_name,
+                             '*' if self.optional else '')
 
 
 class InputPort(Port):
@@ -127,14 +133,13 @@ class InputPort(Port):
         else:
             self._check_ready_state()
 
-        # TODO: yield execution
+        runtime = self.component.runtime
+        packet = runtime.receive(self)
 
         # TODO: claim ownership
         # TODO: increment refcount
 
-        log.debug('Receiving packet from InputPort %s' % self._port_name)
-
-        #raise NotImplementedError
+        return packet
 
 
 class ArrayPort(BasePort):
@@ -194,11 +199,10 @@ class OutputPort(Port):
         '''
         self._check_ready_state()
 
+        runtime = self.component.runtime
+        runtime.send(packet, self.target_port)
+
         # TODO: decrement refcount
-
-        log.debug('Sending packet to OutputPort "%s"' % self._port_name)
-
-        # TODO: yield execution
 
 
 class ArrayOutputPort(ArrayPort):
@@ -245,8 +249,8 @@ class PortRegistry(object):
         Get a port from the registry by name (using [] notation).
         '''
         if port_name not in self._ports:
-            raise AttributeError('Component does not have a port named "%s"' %
-                                 port_name)
+            raise AttributeError('Component "%s" does not have a port named "%s"' %
+                                 (self._component.name, port_name))
 
         return self._ports[port_name]
 

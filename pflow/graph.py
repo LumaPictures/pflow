@@ -53,6 +53,9 @@ class Packet(object):
         # TODO: unset old owner by decrementing self._owner.owned_packet_count
         self._owner = value
 
+    def __str__(self):
+        return 'Packet(%s)' % self.value
+
 
 class BracketPacket(Packet):
     '''
@@ -177,6 +180,7 @@ class Component(RuntimeTarget):
         while not self.is_terminated:
 
             # TODO: Handle exceptions and set ERROR state
+            # try:
             self.run()
 
             # Ensure this component is still in running condition
@@ -185,7 +189,13 @@ class Component(RuntimeTarget):
                 self.terminate()
             else:
                 # More data may arrive
-                self.yield_control()
+                self.suspend()
+
+            # except Exception, ex:
+            #     self.terminate(ex)
+            #
+            #     # Bubble up exception
+            #     raise ex
 
     @abstractmethod
     def run(self):
@@ -228,7 +238,7 @@ class Component(RuntimeTarget):
         return self.state in (ComponentState.TERMINATED,
                               ComponentState.ERROR)
 
-    def terminate(self):
+    def terminate(self, ex=None):
         '''
         Terminate execution for this component.
         This will not terminate upstream components!
@@ -236,24 +246,27 @@ class Component(RuntimeTarget):
         if self.is_terminated:
             raise ValueError('Component "%s" is already terminated' % self.name)
 
-        log.debug('Component "%s" is terminating...' % self.name)
-        self.state = ComponentState.TERMINATED
+        if ex is not None:
+            log.error('Component "%s" is abnormally terminating from %s...' % (self.name,
+                                                                               ex.__class__.__name__))
+            self.state = ComponentState.ERROR
+
+            # Close all input ports so signal upstream components
+            for input in self.inputs:
+                if input.is_open:
+                    input.close()
+        else:
+            self.state = ComponentState.TERMINATED
 
         self.runtime.terminate_thread()
 
     def suspend(self):
         '''
-        Suspend execution.
+        Yield execution to scheduler.
         '''
         self.state = ComponentState.SUSPENDED
         self.runtime.suspend_thread()
-
-    def yield_control(self):
-        '''
-        Yield execution to scheduler.
-        '''
-        log.debug('Component "%s" is yielding...' % self.name)
-        self.runtime.suspend_thread()
+        self.state = ComponentState.ACTIVE
 
     def __str__(self):
         return ('Component(%s, inputs=%s, outputs=%s)' %
@@ -269,14 +282,18 @@ class InitialPacketGenerator(Component):
     make the logic easier.
     '''
     def __init__(self, value):
+        import uuid
+
         self.value = value
-        super(InitialPacketGenerator, self).__init__('IIP_GEN')
+        super(InitialPacketGenerator, self).__init__('IIP_GEN_%s' % uuid.uuid4().hex)
 
     def initialize(self):
         self.outputs.add(OutputPort('OUT'))
 
     def run(self):
-        self.outputs['OUT'].send(Packet(self.value))
+        iip = self.create_packet(self.value)
+        log.debug('IIP: %s' % iip)
+        self.outputs['OUT'].send(iip)
 
 
 class Graph(Component):
