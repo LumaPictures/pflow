@@ -13,7 +13,7 @@ import greenlet
 import haigha as amqp
 
 from . import exc
-from .graph import Component
+from .graph import Component, ComponentState
 from .port import InputPort, OutputPort, \
                   ArrayPort, ArrayInputPort, ArrayOutputPort
 
@@ -90,15 +90,28 @@ class SingleThreadedRuntime(Runtime):
 
         # TODO: Switch from greenlets to gevent so that lower level I/O calls won't block
 
+        def component_runner(component):
+            def _run():
+                component.state = ComponentState.ACTIVE
+
+                while not component.is_terminated:
+                    component.run()
+                    if all([c.is_terminated for c in component.upstream]):
+                        component.terminate()
+                    else:
+                        component.suspend()
+
+            return _run
+
         def scheduler():
             scheduler_thread = greenlet.getcurrent()
-            component_threads = dict([(component, greenlet.greenlet(component._run, scheduler_thread))
+            component_threads = dict([(component, greenlet.greenlet(component_runner(component), scheduler_thread))
                                         for component in graph.components])
 
             # First run all self-starters...
             log.debug('Running all self-starter components...')
             for component in self_starters:
-                log.debug('Switch: %s' % component.name)
+                #log.debug('Switch: %s' % component.name)
                 component_threads[component].switch()
 
                 # TODO
@@ -113,12 +126,12 @@ class SingleThreadedRuntime(Runtime):
                 for component in set(active_components):
                     if component.is_terminated:
                         # Deactivate terminated component
-                        log.debug('Removing terminated component "%s" from scheduler' % component.name)
+                        log.debug('Component "%s" has been terminated' % component.name)
                         active_components.remove(component)
                     else:
                         # Context switch
                         # TODO: Determine if component has pending input data
-                        log.debug('Switch: %s' % component.name)
+                        #log.debug('Switch: %s' % component.name)
                         component_threads[component].switch()
 
             log.info('Graph execution has terminated')
@@ -158,8 +171,18 @@ class SingleThreadedRuntime(Runtime):
         import gevent.monkey
         if not cls._gevent_patched:
             log.debug('Monkey patching for gevent...')
-            gevent.monkey.patch_socket()  # socket
-            gevent.monkey.patch_time()  # time.sleep
+            gevent.monkey.patch_all(socket=True,  # socket
+                                    dns=True,  # socket dns functions
+                                    time=True,  # time.sleep
+                                    select=True, # select
+                                    aggressive=True,  # select/socket
+                                    thread=True,  # thread, threading
+                                    os=True,  # os.fork
+                                    ssl=True,
+                                    httplib=False,
+                                    subprocess=True,
+                                    sys=True,  # stdin, stdout, stderr
+                                    Event=False)
             cls._gevent_patched = True
 
 

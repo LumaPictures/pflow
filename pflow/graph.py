@@ -110,6 +110,19 @@ class Component(RuntimeTarget):
     '''
     __metaclass__ = ABCMeta
 
+    # Valid state transitions for components
+    _valid_transitions = (
+        (ComponentState.NOT_STARTED, ComponentState.ACTIVE),
+
+        (ComponentState.ACTIVE, ComponentState.SUSPENDED),
+        (ComponentState.ACTIVE, ComponentState.TERMINATED),
+        (ComponentState.ACTIVE, ComponentState.ERROR),
+
+        (ComponentState.SUSPENDED, ComponentState.ACTIVE),
+        (ComponentState.SUSPENDED, ComponentState.TERMINATED),
+        (ComponentState.SUSPENDED, ComponentState.ERROR)
+    )
+
     def __init__(self, name):
         if not isinstance(name, basestring):
             raise ValueError('name must be a string')
@@ -127,14 +140,19 @@ class Component(RuntimeTarget):
 
     @state.setter
     def state(self, new_state):
-        # TODO: Prevent invalid transitions
-        # TODO: Fire a transition event
-
         old_state = self._state
+
+        # Ensure state transition is a valid one.
+        if (old_state, new_state) not in self._valid_transitions:
+            raise exc.ComponentStateError('Invalid state transition for component "%s": %s -> %s' %
+                                          (self.name, old_state.value, new_state.value))
+
         self._state = new_state
 
         log.debug('Component "%s" transitioned from %s -> %s' %
-                  (self.name, old_state, new_state))
+                  (self.name, old_state.value, new_state.value))
+
+        # TODO: Fire a transition event
 
     @property
     def upstream(self):
@@ -169,33 +187,33 @@ class Component(RuntimeTarget):
         '''
         pass
 
-    def _run(self):
-        '''
-        This method is called by the scheduler.
-        It will then invoke run()
-        '''
-        self.state = ComponentState.ACTIVE
-
-        # TODO: Handle timeouts
-        while not self.is_terminated:
-
-            # TODO: Handle exceptions and set ERROR state
-            # try:
-            self.run()
-
-            # Ensure this component is still in running condition
-            if all([component.is_terminated for component in self.upstream]):
-                # No more packets will ever arrive!
-                self.terminate()
-            else:
-                # More data may arrive
-                self.suspend()
-
-            # except Exception, ex:
-            #     self.terminate(ex)
-            #
-            #     # Bubble up exception
-            #     raise ex
+    # def _run(self):
+    #     '''
+    #     This method is called by the scheduler.
+    #     It will then invoke run()
+    #     '''
+    #     self.state = ComponentState.ACTIVE
+    #
+    #     # TODO: Handle timeouts
+    #     while not self.is_terminated:
+    #
+    #         # TODO: Handle exceptions and set ERROR state
+    #         # try:
+    #         self.run()
+    #
+    #         # Ensure this component is still in running condition
+    #         if all([component.is_terminated for component in self.upstream]):
+    #             # No more packets will ever arrive!
+    #             self.terminate()
+    #         else:
+    #             # More data may arrive
+    #             self.suspend()
+    #
+    #         # except Exception, ex:
+    #         #     self.terminate(ex)
+    #         #
+    #         #     # Bubble up exception
+    #         #     raise ex
 
     @abstractmethod
     def run(self):

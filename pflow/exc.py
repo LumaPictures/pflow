@@ -12,6 +12,13 @@ class ComponentError(Exception):
     pass
 
 
+class ComponentStateError(ComponentError):
+    '''
+    Component-level state/transition error.
+    '''
+    pass
+
+
 class PortError(FlowError):
     '''
     Port error.
