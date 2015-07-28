@@ -37,7 +37,6 @@ class HypeMachinePopularTracksReader(Component):
 
         for track in tracks:
             self.outputs['OUT'].send_value(track)
-            self.suspend()
 
 
 class HypeMachineTrackStringifier(Component):
@@ -56,7 +55,7 @@ class HypeMachineTrackStringifier(Component):
             self.outputs['OUT'].send_value(transformed)
 
 
-class HypeMachineGraph(Graph):
+class PopularMusicGraph(Graph):
     def initialize(self):
         '''
         'swagger' -> API_KEY HYPE_1(HypeMachinePopularTracksReader)
@@ -129,18 +128,26 @@ class SuperAwesomeDemoGraph(Graph):
 
         rpt_1.outputs['OUT'].connect(mul_1.inputs['X'])
 
+def run_graph(graph):
+    log.info('Running graph: %s' % graph.name)
+    graph.write_graphml(os.path.expanduser('~/%s.graphml' % graph.name))
+
+    runtime = SingleThreadedRuntime()
+    runtime.execute_graph(graph)
+
 
 def main():
     logging.basicConfig(level=logging.INFO)
+    logging.getLogger('requests').setLevel(logging.WARN)
 
-    g = SuperAwesomeDemoGraph('AWESOME_1')
-    #g = HypeMachineGraph('HYPE_1')
-    #g = ProcessSpawningLogger('PROCSPAWN_1')
+    test_graphs = [
+        SuperAwesomeDemoGraph('AWESOME_1'),
+        PopularMusicGraph('MUSIC_1'),
+        #ProcessSpawningLogger('PROCSPAWN_1')
+    ]
 
-    g.write_graphml(os.path.expanduser('~/demo.graphml'))
-
-    rt = SingleThreadedRuntime()
-    rt.execute_graph(g)
+    for graph in test_graphs:
+        run_graph(graph)
 
 
 if __name__ == '__main__':
