@@ -67,8 +67,6 @@ class Sleep(Component):
 
             self.outputs['OUT'].send_packet(packet)
 
-            self.suspend()
-
 
 class Split(Component):
     '''
@@ -116,8 +114,6 @@ class RegexFilter(Component):
             else:
                 self.log.debug('No match: "%s"' % packet.value)
                 self.drop(packet)
-
-            self.suspend()
 
 
 class Concat(Component):
