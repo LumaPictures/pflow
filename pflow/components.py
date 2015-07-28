@@ -53,10 +53,13 @@ class Sleep(Component):
 
         delay_value = self.inputs['DELAY'].receive_value()
         if delay_value is not None:
-            log.debug('%s: Sleeping for %d seconds...' % (self.name, delay_value))
+            self.log.debug('Sleeping for %d seconds...' % delay_value)
             self.state = ComponentState.SUSPENDED
             time.sleep(delay_value)
             # self.suspend(delay_value)
+        else:
+            self.log.warn('Using a %s component with no DELAY set is the same as using Repeat' %
+                          self.__class__.__name__)
 
         self.outputs['OUT'].send(packet)
 
@@ -73,6 +76,42 @@ class Split(Component):
         packet = self.inputs['IN'].receive()
         for outp in self.outputs['OUT']:
             outp.send(packet)
+
+
+class RegexFilter(Component):
+    '''
+    Filters strings on IN against regex REGEX, sending matches to OUT.
+    '''
+    def initialize(self):
+        self.inputs.add(InputPort('IN',
+                                  type_=str,
+                                  description='String to filter'),
+                        InputPort('REGEX',
+                                  type_=str,
+                                  description='Regex to use for filtering'))
+        self.outputs.add(OutputPort('OUT',
+                                    type_=str,
+                                    description='String that matched filter'))
+
+    def run(self):
+        import re
+
+        regex_value = self.inputs['REGEX'].receive_value()
+
+        self.log.debug('Using regex filter: %s' % regex_value)
+        pattern = re.compile(regex_value)
+
+        while not self.is_terminated:
+            packet = self.inputs['IN'].receive()
+
+            if pattern.search(packet.value) is not None:
+                self.log.debug('Matched: "%s"' % packet.value)
+                self.outputs['OUT'].send(packet)
+            else:
+                self.log.debug('No match: "%s"' % packet.value)
+                self.drop(packet)
+
+            self.suspend()
 
 
 class Concat(Component):
@@ -100,10 +139,37 @@ class Multiply(Component):
         y = self.inputs['Y'].receive_value()
         result = int(x) * int(y)
 
-        log.debug('%s: Multiply %s * %s = %d' %
-                  (self.name, x, y, result))
+        self.log.debug('Multiply %s * %s = %d' %
+                       (x, y, result))
 
         self.outputs['OUT'].send_value(result)
+
+
+class FileTailReader(Component):
+    '''
+    Tails a file specified in input port PATH and follows it,
+    emitting new lines that are added to output port OUT.
+    '''
+    def initialize(self):
+        self.inputs.add(InputPort('PATH',
+                                  description='File to tail',
+                                  type_=str))
+        self.outputs.add(OutputPort('OUT',
+                                    description='Lines that are added to file'))
+
+    def run(self):
+        import sh
+
+        file_path = self.inputs['PATH'].receive_value()
+        self.log.debug('Tailing file: %s' % file_path)
+
+        self.state = ComponentState.SUSPENDED
+        for line in sh.tail('-f', file_path, _iter=True):
+            stripped_line = line.rstrip()
+            self.log.debug('Tailed line: %s' % stripped_line)
+
+            self.outputs['OUT'].send_value(stripped_line)
+            self.suspend()
 
 
 class ConsoleLineWriter(Component):
@@ -171,7 +237,7 @@ class RandomNumberGenerator(Component):
         i = 0
         while True:
             random_value = prng.randint(1, 100)
-            log.debug('%s: Generated %d' % (self.name, random_value))
+            self.log.debug('Generated: %d' % random_value)
 
             packet = self.create_packet(random_value)
             self.outputs['OUT'].send(packet)

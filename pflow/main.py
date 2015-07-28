@@ -1,3 +1,4 @@
+import os
 import sys
 import logging
 
@@ -7,7 +8,7 @@ from . import graph
 from .graph import InitialPacketGenerator, Component
 from .runtime import SingleThreadedRuntime
 from .port import InputPort, OutputPort
-from .components import Graph, Repeat, RandomNumberGenerator, ConsoleLineWriter, Multiply, Sleep
+from .components import *
 
 log = logging.getLogger(__name__)
 
@@ -77,6 +78,21 @@ class HypeMachineGraph(Graph):
         str_1.outputs['OUT'].connect(log_1.inputs['IN'])
 
 
+class ProcessSpawningLogger(Graph):
+    def initialize(self):
+        file_path_iip = self.add_component(InitialPacketGenerator('/var/log/system.log'))
+        tail_1 = self.add_component(FileTailReader('TAIL_1'))
+        file_path_iip.connect(tail_1.inputs['PATH'])
+
+        filter_regex_iip = self.add_component(InitialPacketGenerator(r' (USER|DEAD)_PROCESS: '))
+        filter_1 = self.add_component(RegexFilter('FILTER_1'))
+        filter_regex_iip.connect(filter_1.inputs['REGEX'])
+        tail_1.outputs['OUT'].connect(filter_1.inputs['IN'])
+
+        log_1 = self.add_component(ConsoleLineWriter('LOG_1'))
+        filter_1.outputs['OUT'].connect(log_1.inputs['IN'])
+
+
 class SuperAwesomeDemoGraph(Graph):
     def initialize(self):
         '''
@@ -116,15 +132,16 @@ class SuperAwesomeDemoGraph(Graph):
 
 
 def main():
-    logging.basicConfig(level=logging.DEBUG)
+    logging.basicConfig(level=logging.INFO)
     # argp = argparse.ArgumentParser(description='pflow')
     # args = argp.parse_args()
 
     log.info('Initializing graph...')
 
-    g = SuperAwesomeDemoGraph('AWESOME_1')
+    g = ProcessSpawningLogger('PROCSPAWN_1')
+    #g = SuperAwesomeDemoGraph('AWESOME_1')
     #g = HypeMachineGraph('HYPE_1')
-    g.write_graphml('demo.graphml')
+    g.write_graphml(os.path.expanduser('~/demo.graphml'))
 
     rt = SingleThreadedRuntime()
     rt.execute_graph(g)

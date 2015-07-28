@@ -153,7 +153,6 @@ class SingleThreadedRuntime(Runtime):
                 component = source_port.component
                 if component.is_upstream_terminated:
                     # No more data left to receive and upstream has terminated.
-                    log.debug('Terminating dead component "%s" on receive()' % component.name)
                     component.terminate()
                 else:
                     log.debug('Waiting for packet on %s' % source_port)

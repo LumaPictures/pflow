@@ -133,6 +133,8 @@ class Component(RuntimeTarget):
         self.outputs = PortRegistry(self, OutputPort, ArrayOutputPort)
         self._state = ComponentState.NOT_STARTED
         self.owned_packet_count = 0
+        self.log = logging.getLogger('%s(%s)' % (self.__class__.__name__,
+                                                 self.name))
         self.initialize()
 
     @property
@@ -153,8 +155,8 @@ class Component(RuntimeTarget):
 
         self._state = new_state
 
-        log.debug('Component "%s" transitioned from %s -> %s' %
-                  (self.name, old_state.value, new_state.value))
+        self.log.debug('Transitioned from %s -> %s' %
+                       (old_state.value, new_state.value))
 
         # TODO: Fire a transition event
 
@@ -216,7 +218,7 @@ class Component(RuntimeTarget):
         Raises a FlowError if there was a problem.
         '''
         # raise exc.FlowError, 'This component is invalid!'
-        log.debug('Validating component "%s"...' % self.name)
+        self.log.debug('Validating component...')
 
         # TODO: Ensure there's at least 1 port defined
         # TODO: Ensure all ports are connected
@@ -245,8 +247,7 @@ class Component(RuntimeTarget):
             return
 
         if ex is not None:
-            log.error('Component "%s" is abnormally terminating from %s...' % (self.name,
-                                                                               ex.__class__.__name__))
+            self.log.error('Abnormally terminating from %s...' % ex.__class__.__name__)
             self.state = ComponentState.ERROR
         else:
             self.state = ComponentState.TERMINATED
@@ -345,7 +346,7 @@ class Graph(Component):
 
     def run(self):
         self.validate()
-        log.debug('Executing graph...')
+        self.log.debug('Executing graph...')
 
         # TODO: find and run all self-starters
 
@@ -359,7 +360,7 @@ class Graph(Component):
         return all([component.is_terminated for component in self.components])
 
     def validate(self):
-        log.debug('Validating graph...')
+        self.log.debug('Validating graph...')
 
         # TODO: ensure graph contains no components that aren't in self.components
         # TODO: validate all components
@@ -438,9 +439,9 @@ class Graph(Component):
 
                 _build_edges(next_components, visited_nodes)
 
-        log.debug('Building nx graph...')
+        self.log.debug('Building nx graph...')
         _build_nodes(self.components)
         _build_edges(self.components)
 
-        log.debug('Writing graph to "%s"...' % file_path)
+        self.log.debug('Writing graph to "%s"...' % file_path)
         nx.write_graphml(graph, file_path)

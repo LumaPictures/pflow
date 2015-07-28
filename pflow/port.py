@@ -144,7 +144,9 @@ class InputPort(Port):
     def receive_value(self):
         packet = self.receive()
         if packet:
-            return packet.value
+            value = packet.value
+            self.component.drop(packet)
+            return value
 
 
 class ArrayPort(BasePort):
