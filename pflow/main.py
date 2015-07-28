@@ -57,6 +57,11 @@ class HypeMachineTrackStringifier(Component):
 
 class HypeMachineGraph(Graph):
     def initialize(self):
+        '''
+        'swagger' -> API_KEY HYPE_1(HypeMachinePopularTracksReader)
+        '50' -> COUNT HYPE_1 OUT -> IN STR_1(HypeMachineTrackStringifier)
+        STR_1 OUT -> IN LOG_1(ConsoleLineWriter)
+        '''
         api_key_iip = InitialPacketGenerator('swagger')
         count_iip = InitialPacketGenerator(50)
 
@@ -76,12 +81,12 @@ class HypeMachineGraph(Graph):
 class SuperAwesomeDemoGraph(Graph):
     def initialize(self):
         '''
-        42 -> SEED GEN_1(RandomNumberGenerator)
-        3 -> LIMIT GEN_1
-        3 -> LIMIT GEN_2(RandomNumberGenerator)
+        '42' -> SEED GEN_1(RandomNumberGenerator)
+        '3' -> LIMIT GEN_1
+        '3' -> LIMIT GEN_2(RandomNumberGenerator)
         GEN_1 OUT -> IN RPT_1(Repeat) -> X MUL_1(Multiply)
         GEN_2 OUT -> IN SLEEP_1(Sleep) OUT -> Y MUL_1 OUT -> IN LOG_1(ConsoleLineWriter)
-        5 -> DELAY SLEEP_1
+        '5' -> DELAY SLEEP_1
         '''
         seed_iip = InitialPacketGenerator(42)
         limit_iip_1 = InitialPacketGenerator(3)

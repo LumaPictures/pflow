@@ -8,6 +8,7 @@ except ImportError:
 from enum import Enum  # 3.x (or enum34 backport
 
 from . import exc
+from . import parsefbp
 from .port import PortRegistry, InputPort, OutputPort, ArrayInputPort, ArrayOutputPort
 
 log = logging.getLogger(__name__)
