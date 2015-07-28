@@ -92,49 +92,60 @@ class SingleThreadedRuntime(Runtime):
 
         def component_runner(component):
             def _run():
+
+                # Activate component
                 component.state = ComponentState.ACTIVE
 
                 while not component.is_terminated:
+
+                    # Run the componnet
                     component.run()
-                    if all([c.is_terminated for c in component.upstream]):
+
+                    if component.is_upstream_terminated:
+                        # Terminate when all upstream components have terminated and there's no more data to process.
                         component.terminate()
                     else:
+                        # Suspend execution until there's more data to process.
                         component.suspend()
 
             return _run
 
         def scheduler():
-            scheduler_thread = greenlet.getcurrent()
-            component_threads = dict([(component, greenlet.greenlet(component_runner(component), scheduler_thread))
-                                        for component in graph.components])
+            scheduler_thread = greenlet.getcurrent()  # This thread (scheduler)
+            component_threads = {}  # Map of components to their threads
+            run_queue = queue.Queue()  # Scheduler running queue
 
-            # First run all self-starters...
-            log.debug('Running all self-starter components...')
+            # Self-starters run first
             for component in self_starters:
-                #log.debug('Switch: %s' % component.name)
-                component_threads[component].switch()
+                run_queue.put(component)
 
-                # TODO
-                for output in component.outputs:
-                    if isinstance(output, ArrayPort):
-                        raise NotImplementedError('ArrayPort not implemented yet')
+            try:
+                while True:
+                    # Get next component to run
+                    component = run_queue.get(block=False)
+                    #log.info('Run: %s' % component)
 
-            # ...then run the rest of the graph
-            log.debug('Running the rest of the graph...')
-            active_components = set(graph.components)
-            while len(active_components) > 0:
-                for component in set(active_components):
-                    if component.is_terminated:
-                        # Deactivate terminated component
-                        log.debug('Component "%s" has been terminated' % component.name)
-                        active_components.remove(component)
-                    else:
-                        # Context switch
-                        # TODO: Determine if component has pending input data
-                        #log.debug('Switch: %s' % component.name)
-                        component_threads[component].switch()
+                    # Schedule all adjacent downstream components
+                    for next_component in component.downstream:
+                        run_queue.put(next_component)
 
-            log.info('Graph execution has terminated')
+                    if component not in graph.components:
+                        raise ValueError('Component "%s" was not added to graph' % component.name)
+
+                    # Create thread if it doesn't exist
+                    if component not in component_threads:
+                        component_threads[component] = greenlet.greenlet(component_runner(component),
+                                                                         scheduler_thread)
+
+                    # Context switch to thread
+                    component_threads[component].switch()
+
+                    if not component.is_terminated:
+                        # Re-schedule
+                        run_queue.put(component)
+
+            except queue.Empty:
+                log.info('Graph execution has terminated')
 
         # Start the scheduler
         log.debug('Starting the scheduler...')
@@ -152,8 +163,13 @@ class SingleThreadedRuntime(Runtime):
                 log.debug('Received packet on %s' % source_port)
                 return packet
             except queue.Empty:
-                log.debug('Suspending receive on %s' % source_port)
-                self.suspend_thread()
+                component = source_port.component
+                if component.is_upstream_terminated:
+                    # No more data left to receive and upstream has terminated.
+                    component.terminate()
+                else:
+                    log.debug('Waiting for packet on %s' % source_port)
+                    component.suspend()
 
     def terminate_thread(self):
         raise greenlet.GreenletExit

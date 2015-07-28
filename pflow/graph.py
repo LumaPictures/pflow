@@ -187,34 +187,6 @@ class Component(RuntimeTarget):
         '''
         pass
 
-    # def _run(self):
-    #     '''
-    #     This method is called by the scheduler.
-    #     It will then invoke run()
-    #     '''
-    #     self.state = ComponentState.ACTIVE
-    #
-    #     # TODO: Handle timeouts
-    #     while not self.is_terminated:
-    #
-    #         # TODO: Handle exceptions and set ERROR state
-    #         # try:
-    #         self.run()
-    #
-    #         # Ensure this component is still in running condition
-    #         if all([component.is_terminated for component in self.upstream]):
-    #             # No more packets will ever arrive!
-    #             self.terminate()
-    #         else:
-    #             # More data may arrive
-    #             self.suspend()
-    #
-    #         # except Exception, ex:
-    #         #     self.terminate(ex)
-    #         #
-    #         #     # Bubble up exception
-    #         #     raise ex
-
     @abstractmethod
     def run(self):
         '''
@@ -247,6 +219,10 @@ class Component(RuntimeTarget):
         # TODO: Ensure all non-optional ports have connections
 
         return self
+
+    @property
+    def is_upstream_terminated(self):
+        return all([c.is_terminated for c in self.upstream])
 
     @property
     def is_terminated(self):
@@ -284,7 +260,8 @@ class Component(RuntimeTarget):
         '''
         self.state = ComponentState.SUSPENDED
         self.runtime.suspend_thread()
-        self.state = ComponentState.ACTIVE
+        if not self.is_terminated:
+            self.state = ComponentState.ACTIVE
 
     def __str__(self):
         return ('Component(%s, inputs=%s, outputs=%s)' %
