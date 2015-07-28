@@ -138,9 +138,9 @@ def main():
 
     log.info('Initializing graph...')
 
-    g = ProcessSpawningLogger('PROCSPAWN_1')
-    #g = SuperAwesomeDemoGraph('AWESOME_1')
+    g = SuperAwesomeDemoGraph('AWESOME_1')
     #g = HypeMachineGraph('HYPE_1')
+    #g = ProcessSpawningLogger('PROCSPAWN_1')
     g.write_graphml(os.path.expanduser('~/demo.graphml'))
 
     rt = SingleThreadedRuntime()
