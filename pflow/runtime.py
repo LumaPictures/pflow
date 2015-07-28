@@ -31,6 +31,11 @@ class Runtime(object):
     '''
     __metaclass__ = ABCMeta
 
+    def _inject_runtime(self, graph):
+        # Wire up runtime dependency to all components
+        for component in graph.components:
+            component.runtime = self
+
     @abstractmethod
     def execute_graph(self, graph):
         '''
@@ -76,9 +81,7 @@ class SingleThreadedRuntime(Runtime):
         self._recv_queues = collections.defaultdict(queue.Queue)
 
     def execute_graph(self, graph):
-        # Wire up runtime dependency to all components
-        for component in graph.components:
-            component.runtime = self
+        self._inject_runtime(graph)
 
         # Find all self-starter components in the graph
         self_starters = graph.self_starters
@@ -162,13 +165,36 @@ class SingleThreadedRuntime(Runtime):
             cls._gevent_patched = True
 
 
-# class MultiProcessRuntime(Runtime):
-#     '''
-#     Processes are preemtively multitasked, since each is a multiprocessing.Process.
-#
-#     Uses either a multiprocessing.Queue or a distributed message queue for Packet buffering.
-#     Execution is suspended in one of these cases:
-#         1) suspend_thread() is called
-#         2) OS kernel preempts another running process.
-#     '''
-#     pass
+class MultiProcessRuntime(Runtime):
+    '''
+    Processes are preemtively multitasked, since each is a multiprocessing.Process.
+
+    Uses either a multiprocessing.Queue or a distributed message queue for Packet buffering.
+    Execution is suspended in one of these cases:
+        1) suspend_thread() is called
+        2) OS kernel preempts another running process.
+    '''
+    def execute_graph(self, graph):
+        self._inject_runtime(graph)
+
+        # Find all self-starter components in the graph
+        self_starters = graph.self_starters
+        if len(self_starters) == 0:
+            raise exc.FlowError('Unable to find any self-starter Components in graph')
+        else:
+            log.info('Self-starter components are: %s' %
+                     ', '.join([c.name for c in self_starters]))
+
+        raise NotImplementedError
+
+    def send(self, packet, dest_port):
+        raise NotImplementedError
+
+    def receive(self, source_port):
+        raise NotImplementedError
+
+    def terminate_thread(self):
+        raise NotImplementedError
+
+    def suspend_thread(self, seconds=None):
+        raise NotImplementedError
