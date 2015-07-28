@@ -47,6 +47,11 @@ class SingleThreadedRuntime(Runtime):
     def __init__(self):
         self._recv_queues = collections.defaultdict(queue.Queue)
 
+    def is_upstream_terminated(self, component):
+        dead_parents = all([c.is_terminated for c in component.upstream])
+        inputs_have_data = any([self.port_has_data(p) for p in component.inputs])
+        return dead_parents and not inputs_have_data
+
     def execute_graph(self, graph):
         self._inject_runtime(graph)
 
@@ -68,7 +73,7 @@ class SingleThreadedRuntime(Runtime):
                     # Run the component
                     component.run()
 
-                    if component.is_upstream_terminated:
+                    if self.is_upstream_terminated(component):
                         # Terminate when all upstream components have terminated and there's no more data to process.
                         component.terminate()
                     else:
@@ -115,8 +120,8 @@ class SingleThreadedRuntime(Runtime):
                 return packet
             except queue.Empty:
                 component = source_port.component
-                if component.is_upstream_terminated:
-                    # No more data left to receive and upstream has terminated.
+                if self.is_upstream_terminated(component):
+                    # No more data left to receive_packet and upstream has terminated.
                     component.terminate()
                 else:
                     log.debug('Waiting for packet on %s' % source_port)

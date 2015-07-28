@@ -9,3 +9,4 @@
 /.idea/
 /*.egg-info/
 /.eggs/
+/node_modules/

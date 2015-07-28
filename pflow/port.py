@@ -12,6 +12,53 @@ from . import exc
 log = logging.getLogger(__name__)
 
 
+class Packet(object):
+    '''
+    Information packet (IP)
+    '''
+    def __init__(self, value):
+        self.value = value
+        self._owner = None  # Component that owns this
+        self.attrs = {}  # Named attributes
+
+    @property
+    def owner(self):
+        return self._owner
+
+    @owner.setter
+    def owner(self, value):
+        # TODO: unset old owner by decrementing self._owner.owned_packet_count
+        self._owner = value
+
+    def __str__(self):
+        return 'Packet(%s)' % self.value
+
+
+class BracketPacket(Packet):
+    '''
+    Special packet used for bracketing.
+    '''
+    __metaclass__ = ABCMeta
+
+
+class StartBracket(BracketPacket):
+    '''
+    Start of bracketed data.
+    '''
+    def __init__(self):
+        # HACK
+        super(StartBracket, self).__init__('__BRACKET_MAGIC_VALUE:START__')
+
+
+class EndBracket(BracketPacket):
+    '''
+    End of bracketed data.
+    '''
+    def __init__(self):
+        # HACK
+        super(EndBracket, self).__init__('__BRACKET_MAGIC_VALUE:END__')
+
+
 class BasePort(object):
     __metaclass__ = ABCMeta
 
@@ -19,7 +66,8 @@ class BasePort(object):
 class Port(BasePort):
     __metaclass__ = ABCMeta
 
-    def __init__(self, name, description=None, optional=False, type_=str, auto_open=True):
+    # TODO: change type_ to types (to allow for varying data types when bracketing)
+    def __init__(self, name, description=None, optional=False, type_=str):
         if not isinstance(name, basestring):
             raise ValueError('name must be a string')
 
@@ -27,34 +75,34 @@ class Port(BasePort):
         self.description = description
         self.optional = optional  # Is this port optional?
         self.type_ = type_  # Data type
-        self.auto_open = auto_open  # Is this port auto-opening?
 
         self.component = None  # Owning component
         self.source_port = None
         self.target_port = None
-        self._buffer = Queue()  # TODO: Delegate to runtime
         self._is_open = True
 
     def open(self):
-        if not self.is_connected:
-            raise exc.PortError('Port "%s" is disconnected (%s, %s, %s), and can not be opened' %
-                                (self._port_name, self.component, self.target_port, self.source_port))
+        if not self.is_connected():
+            raise exc.PortError('%s is disconnected, and can not be opened' % self)
 
         if self._is_open:
-            raise exc.PortError('Port "%s" is already open' % self._port_name)
+            raise exc.PortError('%s is already open' % self)
 
         self._is_open = True
         # TODO
 
     def close(self):
         if not self._is_open:
-            raise exc.PortError('Port "%s" is already closed' % self._port_name)
+            raise exc.PortError('%s is already closed' % self)
 
         self._is_open = False
 
-    @property
     def is_open(self):
         return self._is_open
+
+    @abstractmethod
+    def is_connected(self):
+        pass
 
     def connect(self, target_port):
         '''
@@ -69,25 +117,10 @@ class Port(BasePort):
         self.target_port = target_port
         target_port.source_port = self
 
-        log.debug('Port "%s.%s" connected to "%s.%s"' %
-                  (self.component.name, self.name,
-                   target_port.component.name, target_port.name))
-
-        # if self.auto_open:
-        #     log.debug('Opening Port "%s" (auto)' % self._port_name)
-        #     self.open()
+        log.debug('%s connected to %s' % (self, target_port))
 
     @property
-    def is_connected(self):
-        if self.component is None:
-            return False
-        elif isinstance(self, InputPort):
-            return self.source_port is not None
-        elif isinstance(self, OutputPort):
-            return self.target_port is not None
-
-    @property
-    def _port_name(self):
+    def full_name(self):
         if self.component is not None:
             component_name = self.component.name
         else:
@@ -96,20 +129,20 @@ class Port(BasePort):
         return '%s.%s' % (component_name, self.name)
 
     def _check_ready_state(self):
-        if not self.is_connected and not self.optional:
-            raise exc.PortError('Port "%s" must be connected' % self._port_name)
-        if not self.is_open:
-            raise exc.PortClosedError('Port "%s" is closed' % self._port_name)
+        if not self.is_connected() and not self.optional:
+            raise exc.PortError('%s must be connected' % self)
+        if not self.is_open():
+            raise exc.PortClosedError('%s is closed' % self)
 
     def __getitem__(self, index):
-        raise ValueError('Port "%s" is not an array port' % self._port_name)
+        raise ValueError('%s is not an array port' % self)
 
     def __iter__(self):
-        raise ValueError('Port "%s" is not an array port' % self._port_name)
+        raise ValueError('%s is not an array port' % self)
 
     def __str__(self):
         return '%s(%s%s)' % (self.__class__.__name__,
-                             self._port_name,
+                             self.full_name,
                              '*' if self.optional else '')
 
 
@@ -121,14 +154,18 @@ class InputPort(Port):
     def __init__(self, name='IN', **kwargs):
         super(InputPort, self).__init__(name, **kwargs)
 
-    def receive(self):
+    def is_connected(self):
+        return (self.component is not None and
+                self.source_port is not None)
+
+    def receive_packet(self):
         '''
         Receive the next Packet from this input port.
 
         :return: Packet that was received or None if EOF
         '''
         # Optional port with no connection
-        if self.optional and not self.is_connected:
+        if self.optional and not self.is_connected():
             return None
         else:
             self._check_ready_state()
@@ -141,8 +178,8 @@ class InputPort(Port):
 
         return packet
 
-    def receive_value(self):
-        packet = self.receive()
+    def receive(self):
+        packet = self.receive_packet()
         if packet:
             value = packet.value
             self.component.drop(packet)
@@ -200,14 +237,19 @@ class OutputPort(Port):
     '''
     def __init__(self, name='OUT', **kwargs):
         super(OutputPort, self).__init__(name, **kwargs)
+        self._bracket_depth = 0
 
-    def send(self, packet):
+    def is_connected(self):
+        return (self.component is not None and
+                self.target_port is not None)
+
+    def send_packet(self, packet):
         '''
         Send a single Packet over this output port.
 
         :param packet: the Packet to send over this output port.
         '''
-        if self.optional and not self.is_connected:
+        if self.optional and not self.is_connected():
             return
         else:
             self._check_ready_state()
@@ -217,9 +259,31 @@ class OutputPort(Port):
 
         # TODO: decrement refcount
 
-    def send_value(self, value):
+    def send(self, value):
         packet = self.component.create_packet(value)
-        self.send(packet)
+        self.send_packet(packet)
+
+    def start_bracket(self):
+        self._bracket_depth += 1
+
+        packet = StartBracket()
+        packet.owner = self.component
+        self.send_packet(packet)
+
+    def end_bracket(self):
+        self._bracket_depth -= 1
+        if self._bracket_depth < 0:
+            raise ValueError('end_bracket() called too many times on %s' % self)
+
+        packet = EndBracket()
+        packet.owner = self.component
+        self.send_packet(packet)
+
+    def close(self):
+        if self._bracket_depth != 0:
+            raise ValueError('There are %d open brackets on %s' % self)
+
+        super(OutputPort, self).close()
 
 
 class ArrayOutputPort(ArrayPort):
@@ -247,15 +311,15 @@ class PortRegistry(object):
         '''
         for port in ports:
             if not isinstance(port, self._required_superclasses):
-                raise ValueError('Port "%s" must be an instance of: %s' %
-                                 (port.name, ', '.join([c.__name__ for c in self._required_superclasses])))
+                raise ValueError('%s must be an instance of: %s' %
+                                 (port, ', '.join([c.__name__ for c in self._required_superclasses])))
 
             if port.name in self._ports:
-                raise ValueError('Port "%s" already exists' % port.name)
+                raise ValueError('%s already exists' % port)
 
             if port.component is not None and port.component != self._component:
-                raise ValueError('Port "%s" is already attached to Component "%s"' %
-                                 (port.name, port.component.name))
+                raise ValueError('%s is already attached to %s' %
+                                 (port, port.component))
 
             port.component = self._component
             self._ports[port.name] = port
@@ -267,8 +331,8 @@ class PortRegistry(object):
         Get a port from the registry by name (using [] notation).
         '''
         if port_name not in self._ports:
-            raise AttributeError('Component "%s" does not have a port named "%s"' %
-                                 (self._component.name, port_name))
+            raise AttributeError('%s does not have a port named "%s"' %
+                                 (self._component, port_name))
 
         return self._ports[port_name]
 

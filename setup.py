@@ -12,7 +12,8 @@ install_requires = [
     'networkx',  # writing graphml files
     'gevent',
     'haigha',  # amqp
-    'pyparsing'  # fbp grammar
+    'pyparsing',  # fbp grammar
+    'websocket'
 ]
 
 # Test dependencies

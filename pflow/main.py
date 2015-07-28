@@ -1,4 +1,4 @@
-from .runtimes.single_thread import SingleThreadedRuntime  # Need to load before logging
+from .runtimes.single_process import SingleThreadedRuntime  # Need to load before logging
 
 import os
 import sys
@@ -23,12 +23,10 @@ class HypeMachinePopularTracksReader(Component):
     def run(self):
         import requests
 
-        api_key = self.inputs['API_KEY'].receive().value
+        api_key = self.inputs['API_KEY'].receive()
 
-        count_packet = self.inputs['COUNT'].receive()
-        if count_packet is not None:
-            count = count_packet.value
-        else:
+        count = self.inputs['COUNT'].receive()
+        if count is None:
             count = 10
 
         response = requests.get('https://api.hypem.com/v2/tracks?sort=latest&key=%s&count=%d' %
@@ -36,7 +34,7 @@ class HypeMachinePopularTracksReader(Component):
         tracks = response.json()
 
         for track in tracks:
-            self.outputs['OUT'].send_value(track)
+            self.outputs['OUT'].send(track)
 
 
 class HypeMachineTrackStringifier(Component):
@@ -45,14 +43,11 @@ class HypeMachineTrackStringifier(Component):
         self.outputs.add(OutputPort('OUT'))
 
     def run(self):
-        track_packet = self.inputs['IN'].receive()
-        track = track_packet.value
+        track = self.inputs['IN'].receive()
 
-        if not (track['artist'] and track['title']):
-            self.drop(track_packet)
-        else:
+        if track['artist'] and track['title']:
             transformed = '%(artist)s - %(title)s' % track
-            self.outputs['OUT'].send_value(transformed)
+            self.outputs['OUT'].send(transformed)
 
 
 class PopularMusicGraph(Graph):

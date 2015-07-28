@@ -16,8 +16,8 @@ class Repeat(Component):
         self.outputs.add(OutputPort('OUT'))
 
     def run(self):
-        packet = self.inputs['IN'].receive()
-        self.outputs['OUT'].send(packet)
+        packet = self.inputs['IN'].receive_packet()
+        self.outputs['OUT'].send_packet(packet)
 
 
 class Drop(Component):
@@ -30,7 +30,7 @@ class Drop(Component):
         self.inputs.add(InputPort('IN'))
 
     def run(self):
-        packet = self.inputs['IN'].receive()
+        packet = self.inputs['IN'].receive_packet()
         self.drop(packet)
 
 
@@ -49,7 +49,7 @@ class Sleep(Component):
     def run(self):
         import time
 
-        delay_value = self.inputs['DELAY'].receive_value()
+        delay_value = self.inputs['DELAY'].receive()
         if delay_value is None:
             delay_value = 0
 
@@ -58,14 +58,14 @@ class Sleep(Component):
                           self.__class__.__name__)
 
         while not self.is_terminated:
-            packet = self.inputs['IN'].receive()
+            packet = self.inputs['IN'].receive_packet()
 
             self.log.debug('Sleeping for %d seconds...' % delay_value)
             self.state = ComponentState.SUSPENDED
             time.sleep(delay_value)
             # self.suspend(delay_value)
 
-            self.outputs['OUT'].send(packet)
+            self.outputs['OUT'].send_packet(packet)
 
             self.suspend()
 
@@ -79,9 +79,9 @@ class Split(Component):
         self.outputs.add(ArrayOutputPort('OUT', 10))
 
     def run(self):
-        packet = self.inputs['IN'].receive()
+        packet = self.inputs['IN'].receive_packet()
         for outp in self.outputs['OUT']:
-            outp.send(packet)
+            outp.send_packet(packet)
 
 
 class RegexFilter(Component):
@@ -102,17 +102,17 @@ class RegexFilter(Component):
     def run(self):
         import re
 
-        regex_value = self.inputs['REGEX'].receive_value()
+        regex_value = self.inputs['REGEX'].receive()
 
         self.log.debug('Using regex filter: %s' % regex_value)
         pattern = re.compile(regex_value)
 
         while not self.is_terminated:
-            packet = self.inputs['IN'].receive()
+            packet = self.inputs['IN'].receive_packet()
 
             if pattern.search(packet.value) is not None:
                 self.log.debug('Matched: "%s"' % packet.value)
-                self.outputs['OUT'].send(packet)
+                self.outputs['OUT'].send_packet(packet)
             else:
                 self.log.debug('No match: "%s"' % packet.value)
                 self.drop(packet)
@@ -131,7 +131,7 @@ class Concat(Component):
     def run(self):
         for inp in self.inputs['IN']:
             packet = inp.read()
-            self.outputs['OUT'].send(packet)
+            self.outputs['OUT'].send_packet(packet)
 
 
 class Multiply(Component):
@@ -141,14 +141,14 @@ class Multiply(Component):
         self.outputs.add(OutputPort('OUT'))
 
     def run(self):
-        x = self.inputs['X'].receive_value()
-        y = self.inputs['Y'].receive_value()
+        x = self.inputs['X'].receive()
+        y = self.inputs['Y'].receive()
         result = int(x) * int(y)
 
         self.log.debug('Multiply %s * %s = %d' %
                        (x, y, result))
 
-        self.outputs['OUT'].send_value(result)
+        self.outputs['OUT'].send(result)
 
 
 class FileTailReader(Component):
@@ -166,7 +166,7 @@ class FileTailReader(Component):
     def run(self):
         import sh
 
-        file_path = self.inputs['PATH'].receive_value()
+        file_path = self.inputs['PATH'].receive()
         self.log.debug('Tailing file: %s' % file_path)
 
         self.state = ComponentState.SUSPENDED
@@ -174,7 +174,7 @@ class FileTailReader(Component):
             stripped_line = line.rstrip()
             self.log.debug('Tailed line: %s' % stripped_line)
 
-            self.outputs['OUT'].send_value(stripped_line)
+            self.outputs['OUT'].send(stripped_line)
             self.suspend()
 
 
@@ -188,7 +188,7 @@ class ConsoleLineWriter(Component):
         self.inputs.add(InputPort('IN'))
 
     def run(self):
-        message = self.inputs['IN'].receive_value()
+        message = self.inputs['IN'].receive()
         print message
 
 
@@ -234,11 +234,11 @@ class RandomNumberGenerator(Component):
         prng = random.Random()
 
         # Seed the PRNG
-        seed_value = self.inputs['SEED'].receive_value()
+        seed_value = self.inputs['SEED'].receive()
         if seed_value is not None:
             prng.seed(seed_value)
 
-        limit_value = self.inputs['LIMIT'].receive_value()
+        limit_value = self.inputs['LIMIT'].receive()
 
         i = 0
         while True:
@@ -246,7 +246,7 @@ class RandomNumberGenerator(Component):
             self.log.debug('Generated: %d' % random_value)
 
             packet = self.create_packet(random_value)
-            self.outputs['OUT'].send(packet)
+            self.outputs['OUT'].send_packet(packet)
             self.suspend()
 
             if limit_value is not None:

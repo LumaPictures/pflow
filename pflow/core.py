@@ -9,53 +9,10 @@ from enum import Enum  # 3.x (or enum34 backport
 
 from . import exc
 from . import parsefbp
-from .port import PortRegistry, InputPort, OutputPort, ArrayInputPort, ArrayOutputPort
+from .port import Packet, PortRegistry, InputPort, OutputPort, ArrayInputPort, ArrayOutputPort
 from .runtimes.base import RuntimeTarget
 
 log = logging.getLogger(__name__)
-
-
-class Packet(object):
-    '''
-    Information packet (IP)
-    '''
-    def __init__(self, value):
-        self.value = value
-        self._owner = None  # Component that owns this
-        self.attrs = {}  # Named attributes
-
-    @property
-    def owner(self):
-        return self._owner
-
-    @owner.setter
-    def owner(self, value):
-        # TODO: unset old owner by decrementing self._owner.owned_packet_count
-        self._owner = value
-
-    def __str__(self):
-        return 'Packet(%s)' % self.value
-
-
-class BracketPacket(Packet):
-    '''
-    Special packet used for bracketing.
-    '''
-    __metaclass__ = ABCMeta
-
-
-class StartBracket(BracketPacket):
-    '''
-    Start of bracketed data.
-    '''
-    pass
-
-
-class EndBracket(BracketPacket):
-    '''
-    End of bracketed data.
-    '''
-    pass
 
 
 class ComponentState(Enum):
@@ -129,8 +86,8 @@ class Component(RuntimeTarget):
 
         # Ensure state transition is a valid one.
         if (old_state, new_state) not in self._valid_transitions:
-            raise exc.ComponentStateError('Invalid state transition for component "%s": %s -> %s' %
-                                          (self.name, old_state.value, new_state.value))
+            raise exc.ComponentStateError('Invalid state transition for %s: %s -> %s' %
+                                          (self, old_state.value, new_state.value))
 
         self._state = new_state
 
@@ -147,7 +104,7 @@ class Component(RuntimeTarget):
         upstream = set()
 
         for port in self.inputs:
-            if port.is_connected:
+            if port.is_connected():
                 upstream.add(port.source_port.component)
 
         return upstream
@@ -160,7 +117,7 @@ class Component(RuntimeTarget):
         downstream = set()
 
         for port in self.outputs:
-            if port.is_connected:
+            if port.is_connected():
                 downstream.add(port.target_port.component)
 
         return downstream
@@ -206,12 +163,6 @@ class Component(RuntimeTarget):
         return self
 
     @property
-    def is_upstream_terminated(self):
-        dead_parents = all([c.is_terminated for c in self.upstream])
-        inputs_have_data = any([self.runtime.port_has_data(p) for p in self.inputs])
-        return dead_parents and not inputs_have_data
-
-    @property
     def is_terminated(self):
         '''
         Has this component been terminated?
@@ -228,7 +179,7 @@ class Component(RuntimeTarget):
             return
 
         if ex is not None:
-            self.log.error('Abnormally terminating from %s...' % ex.__class__.__name__)
+            self.log.error('Abnormally terminating because of %s...' % ex.__class__.__name__)
             self.state = ComponentState.ERROR
         else:
             self.state = ComponentState.TERMINATED
@@ -236,7 +187,7 @@ class Component(RuntimeTarget):
         # Close all input ports
         for input in self.inputs:
             input.clear()
-            if input.is_open:
+            if input.is_open():
                 input.close()
 
         self.runtime.terminate_thread()
@@ -277,8 +228,7 @@ class InitialPacketGenerator(Component):
 
     def run(self):
         iip = self.create_packet(self.value)
-        log.debug('IIP: %s' % iip)
-        self.outputs['OUT'].send(iip)
+        self.outputs['OUT'].send_packet(iip)
 
     def connect(self, target_port):
         self.outputs['OUT'].connect(target_port)

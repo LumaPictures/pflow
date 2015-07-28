@@ -44,14 +44,14 @@ To define a component, override the `initialize` and `run` methods:
             self.outputs.add(OutputPort('OUT'))
            
         def run(self):
-            input_packet = self.inputs['IN'].receive()
+            input_packet = self.inputs['IN'].receive_packet()
             time.sleep(5)
-            self.outputs['OUT'].send(input_packet)
+            self.outputs['OUT'].send_packet(input_packet)
 
 Here's some general rules of thumb for creating components:
 
 * Components will automatically suspend execution after `run()` completes, and will await the next packet unless there 
-  is no more data to receive and all upstream components have been terminated. In that case, the component will just
+  is no more data to receive_packet and all upstream components have been terminated. In that case, the component will just
   terminate itself.
 * Call `suspend()` if you need to be explicit about suspending execution (typically done in loops or when waiting for
   some asynchronous task to complete).
