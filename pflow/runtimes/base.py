@@ -50,3 +50,25 @@ class Runtime(object):
         Suspend execution of this thread until the next packet arrives.
         '''
         pass
+
+
+class RuntimeTarget(object):
+    '''
+    Class that can have a Runtime injected into it after graph construction.
+    Runtimes implement scheduling behavior.
+    '''
+    __metaclass__ = ABCMeta
+
+    @property
+    def runtime(self):
+        if not hasattr(self, '_runtime'):
+            raise ValueError('You need to run this graph through a Runtime.')
+
+        return self._runtime
+
+    @runtime.setter
+    def runtime(self, runtime):
+        if hasattr(self, '_runtime') and runtime != self._runtime:
+            raise ValueError('Runtime can not be changed. Please re-create the graph.')
+
+        self._runtime = runtime

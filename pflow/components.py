@@ -1,6 +1,6 @@
 import logging
 
-from .graph import Graph, Component, ComponentState, \
+from .core import Graph, Component, ComponentState, \
     InputPort, OutputPort, \
     ArrayInputPort, ArrayOutputPort
 

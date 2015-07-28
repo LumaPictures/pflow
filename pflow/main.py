@@ -4,8 +4,8 @@ import os
 import sys
 import logging
 
-from . import graph
-from .graph import InitialPacketGenerator, Component
+from . import core
+from .core import InitialPacketGenerator, Component
 from .port import InputPort, OutputPort
 from .components import *
 

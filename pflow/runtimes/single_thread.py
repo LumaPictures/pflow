@@ -28,7 +28,7 @@ import gevent
 
 from .base import Runtime
 from .. import exc
-from ..graph import ComponentState
+from ..core import ComponentState
 
 log = logging.getLogger(__name__)
 
