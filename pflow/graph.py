@@ -254,12 +254,12 @@ class Component(RuntimeTarget):
 
         self.runtime.terminate_thread()
 
-    def suspend(self):
+    def suspend(self, seconds=None):
         '''
         Yield execution to scheduler.
         '''
         self.state = ComponentState.SUSPENDED
-        self.runtime.suspend_thread()
+        self.runtime.suspend_thread(seconds)
         if not self.is_terminated:
             self.state = ComponentState.ACTIVE
 
@@ -289,6 +289,9 @@ class InitialPacketGenerator(Component):
         iip = self.create_packet(self.value)
         log.debug('IIP: %s' % iip)
         self.outputs['OUT'].send(iip)
+
+    def connect(self, target_port):
+        self.outputs['OUT'].connect(target_port)
 
 
 class Graph(Component):

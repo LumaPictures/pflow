@@ -49,8 +49,18 @@ class Sleep(Component):
     def run(self):
         import time
 
+        delay_packet = self.inputs['DELAY'].receive()
+        if delay_packet is not None:
+            delay_value = delay_packet.value
+        else:
+            delay_value = None
+
         packet = self.inputs['IN'].receive()
-        time.sleep(self.inputs['DELAY'].value)
+
+        if delay_value is not None:
+            log.debug('%s: Sleeping for %d seconds...' % (self.name, delay_value))
+            time.sleep(delay_value)
+
         self.outputs['OUT'].send(packet)
 
 

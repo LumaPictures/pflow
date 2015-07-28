@@ -9,7 +9,7 @@ except ImportError:
     import Queue as queue  # 2.x
 
 import gevent
-import greenlet
+#import greenlet
 import haigha as amqp
 
 from . import exc
@@ -88,8 +88,6 @@ class SingleThreadedRuntime(Runtime):
             log.info('Self-starter components are: %s' %
                      ', '.join([c.name for c in self_starters]))
 
-        # TODO: Switch from greenlets to gevent so that lower level I/O calls won't block
-
         def component_runner(component):
             def _run():
 
@@ -110,46 +108,8 @@ class SingleThreadedRuntime(Runtime):
 
             return _run
 
-        def scheduler():
-            scheduler_thread = greenlet.getcurrent()  # This thread (scheduler)
-            component_threads = {}  # Map of components to their threads
-            run_queue = queue.Queue()  # Scheduler running queue
-
-            # Self-starters run first
-            for component in self_starters:
-                run_queue.put(component)
-
-            try:
-                while True:
-                    # Get next component to run
-                    component = run_queue.get(block=False)
-                    #log.info('Run: %s' % component)
-
-                    # Schedule all adjacent downstream components
-                    for next_component in component.downstream:
-                        run_queue.put(next_component)
-
-                    if component not in graph.components:
-                        raise ValueError('Component "%s" was not added to graph' % component.name)
-
-                    # Create thread if it doesn't exist
-                    if component not in component_threads:
-                        component_threads[component] = greenlet.greenlet(component_runner(component),
-                                                                         scheduler_thread)
-
-                    # Context switch to thread
-                    component_threads[component].switch()
-
-                    if not component.is_terminated:
-                        # Re-schedule
-                        run_queue.put(component)
-
-            except queue.Empty:
-                log.info('Graph execution has terminated')
-
-        # Start the scheduler
-        log.debug('Starting the scheduler...')
-        greenlet.greenlet(scheduler).switch()
+        component_threads = [gevent.spawn(component_runner(c)) for c in graph.components]
+        gevent.wait(component_threads)
 
     def send(self, packet, dest_port):
         q = self._recv_queues[dest_port]
@@ -172,11 +132,11 @@ class SingleThreadedRuntime(Runtime):
                     component.suspend()
 
     def terminate_thread(self):
-        raise greenlet.GreenletExit
+        raise gevent.GreenletExit
 
-    def suspend_thread(self):
-        # Switch back to the scheduler greenlet
-        greenlet.getcurrent().parent.switch()
+    def suspend_thread(self, seconds=None):
+        # Yield control back to the scheduler
+        gevent.sleep(seconds)
 
     @classmethod
     def gevent_monkey_patch(cls):
@@ -197,7 +157,7 @@ class SingleThreadedRuntime(Runtime):
                                     ssl=True,
                                     httplib=False,
                                     subprocess=True,
-                                    sys=True,  # stdin, stdout, stderr
+                                    sys=False,  # stdin, stdout, stderr
                                     Event=False)
             cls._gevent_patched = True
 

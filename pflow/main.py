@@ -6,7 +6,7 @@ import argparse
 from . import graph
 from .graph import InitialPacketGenerator
 from .runtime import SingleThreadedRuntime
-from .components import Graph, Repeat, RandomNumberGenerator, ConsoleLineWriter, Multiply
+from .components import Graph, Repeat, RandomNumberGenerator, ConsoleLineWriter, Multiply, Sleep
 
 log = logging.getLogger(__name__)
 
@@ -18,24 +18,30 @@ class SuperAwesomeDemoGraph(Graph):
         3 -> LIMIT GEN_1
         3 -> LIMIT GEN_2(RandomNumberGenerator)
         GEN_1 OUT -> IN RPT_1(Repeat) -> X MUL_1(Multiply)
-        GEN_2 OUT -> Y MUL_1 OUT -> IN LOG_1(ConsoleLineWriter)
+        GEN_2 OUT -> IN SLEEP_1(Sleep) OUT -> Y MUL_1 OUT -> IN LOG_1(ConsoleLineWriter)
+        5 -> DELAY SLEEP_1
         '''
         seed_iip = InitialPacketGenerator(42)
         limit_iip_1 = InitialPacketGenerator(3)
         limit_iip_2 = InitialPacketGenerator(3)
 
         gen_1 = RandomNumberGenerator('GEN_1')
-        seed_iip.outputs['OUT'].connect(gen_1.inputs['SEED'])
-        limit_iip_1.outputs['OUT'].connect(gen_1.inputs['LIMIT'])
+        seed_iip.connect(gen_1.inputs['SEED'])
+        limit_iip_1.connect(gen_1.inputs['LIMIT'])
 
         gen_2 = RandomNumberGenerator('GEN_2')
-        limit_iip_2.outputs['OUT'].connect(gen_2.inputs['LIMIT'])
+        limit_iip_2.connect(gen_2.inputs['LIMIT'])
 
         rpt_1 = Repeat('RPT_1')
         gen_1.outputs['OUT'].connect(rpt_1.inputs['IN'])
 
         mul_1 = Multiply('MUL_1')
-        gen_2.outputs['OUT'].connect(mul_1.inputs['Y'])
+
+        sleep_iip_delay_1 = InitialPacketGenerator(5)
+        sleep_1 = Sleep('SLEEP_1')
+        sleep_iip_delay_1.connect(sleep_1.inputs['DELAY'])
+        gen_2.outputs['OUT'].connect(sleep_1.inputs['IN'])
+        sleep_1.outputs['OUT'].connect(mul_1.inputs['Y'])
 
         log_1 = ConsoleLineWriter('LOG_1')
         mul_1.outputs['OUT'].connect(log_1.inputs['IN'])
@@ -47,6 +53,8 @@ class SuperAwesomeDemoGraph(Graph):
                            seed_iip,
                            gen_1,
                            gen_2,
+                           sleep_1,
+                           sleep_iip_delay_1,
                            mul_1,
                            rpt_1,
                            log_1)
