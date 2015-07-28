@@ -1,6 +1,6 @@
 import logging
 
-from .graph import Graph, Component, \
+from .graph import Graph, Component, ComponentState, \
     InputPort, OutputPort, \
     ArrayInputPort, ArrayOutputPort
 
@@ -40,8 +40,8 @@ class Sleep(Component):
     repeating inputs from IN to OUT.
     '''
     def initialize(self):
-        self.inputs.add(InputPort('IN'))
-        self.inputs.add(InputPort('DELAY',
+        self.inputs.add(InputPort('IN'),
+                        InputPort('DELAY',
                                   type_=int,
                                   description='Number of seconds to delay'))
         self.outputs.add(OutputPort('OUT'))
@@ -49,16 +49,14 @@ class Sleep(Component):
     def run(self):
         import time
 
-        delay_packet = self.inputs['DELAY'].receive()
-        if delay_packet is not None:
-            delay_value = delay_packet.value
-        else:
-            delay_value = None
+        raise ValueError('foo')
 
         packet = self.inputs['IN'].receive()
 
+        delay_value = self.inputs['DELAY'].receive_value()
         if delay_value is not None:
             log.debug('%s: Sleeping for %d seconds...' % (self.name, delay_value))
+            self.state = ComponentState.SUSPENDED
             time.sleep(delay_value)
 
         self.outputs['OUT'].send(packet)
@@ -94,21 +92,19 @@ class Concat(Component):
 
 class Multiply(Component):
     def initialize(self):
-        self.inputs.add(InputPort('X'))
-        self.inputs.add(InputPort('Y'))
+        self.inputs.add(InputPort('X'),
+                        InputPort('Y'))
         self.outputs.add(OutputPort('OUT'))
 
     def run(self):
-        x_packet = self.inputs['X'].receive()
-        y_packet = self.inputs['Y'].receive()
-        result_packet = self.create_packet(int(x_packet.value) * int(y_packet.value))
+        x = self.inputs['X'].receive_value()
+        y = self.inputs['Y'].receive_value()
+        result = int(x) * int(y)
 
-        log.debug('%s: Multiply %s * %s = %d' % (self.name,
-                                                 x_packet.value,
-                                                 y_packet.value,
-                                                 result_packet.value))
+        log.debug('%s: Multiply %s * %s = %d' %
+                  (self.name, x, y, result))
 
-        self.outputs['OUT'].send(result_packet)
+        self.outputs['OUT'].send_value(result)
 
 
 class ConsoleLineWriter(Component):
@@ -121,8 +117,8 @@ class ConsoleLineWriter(Component):
         self.inputs.add(InputPort('IN'))
 
     def run(self):
-        packet = self.inputs['IN'].receive()
-        print packet.value
+        message = self.inputs['IN'].receive_value()
+        print message
 
 
 class LogTap(Graph):
@@ -155,8 +151,8 @@ class RandomNumberGenerator(Component):
         self.inputs.add(InputPort('SEED',
                                   type_=int,
                                   optional=True,
-                                  description='Seed value for PRNG'))
-        self.inputs.add(InputPort('LIMIT',
+                                  description='Seed value for PRNG'),
+                        InputPort('LIMIT',
                                   type_=int,
                                   optional=True,
                                   description='Number of times to iterate (default: infinite)'))
@@ -167,15 +163,11 @@ class RandomNumberGenerator(Component):
         prng = random.Random()
 
         # Seed the PRNG
-        seed_packet = self.inputs['SEED'].receive()
-        if seed_packet is not None:
-            prng.seed(seed_packet.value)
+        seed_value = self.inputs['SEED'].receive_value()
+        if seed_value is not None:
+            prng.seed(seed_value)
 
-        limit_packet = self.inputs['LIMIT'].receive()
-        if limit_packet is not None:
-            limit = limit_packet.value
-        else:
-            limit = None
+        limit_value = self.inputs['LIMIT'].receive_value()
 
         i = 0
         while True:
@@ -186,8 +178,8 @@ class RandomNumberGenerator(Component):
             self.outputs['OUT'].send(packet)
             self.suspend()
 
-            if limit is not None:
+            if limit_value is not None:
                 i += 1
-                if i >= limit:
+                if i >= limit_value:
                     self.terminate()
                     break

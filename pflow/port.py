@@ -47,7 +47,7 @@ class Port(BasePort):
         # TODO
 
     def close(self):
-        if self._is_open:
+        if not self._is_open:
             raise exc.PortError('Port "%s" is already closed' % self._port_name)
 
         self._is_open = False
@@ -141,6 +141,11 @@ class InputPort(Port):
 
         return packet
 
+    def receive_value(self):
+        packet = self.receive()
+        if packet:
+            return packet.value
+
 
 class ArrayPort(BasePort):
     __metaclass__ = ABCMeta
@@ -204,6 +209,10 @@ class OutputPort(Port):
 
         # TODO: decrement refcount
 
+    def send_value(self, value):
+        packet = self.component.create_packet(value)
+        self.send(packet)
+
 
 class ArrayOutputPort(ArrayPort):
     @abstractmethod
@@ -224,23 +233,24 @@ class PortRegistry(object):
 
         self._required_superclasses = required_superclasses
 
-    def add(self, port):
+    def add(self, *ports):
         '''
         Add a new port to the registry.
         '''
-        if not isinstance(port, self._required_superclasses):
-            raise ValueError('Port "%s" must be an instance of: %s' %
-                             (port.name, ', '.join([c.__name__ for c in self._required_superclasses])))
+        for port in ports:
+            if not isinstance(port, self._required_superclasses):
+                raise ValueError('Port "%s" must be an instance of: %s' %
+                                 (port.name, ', '.join([c.__name__ for c in self._required_superclasses])))
 
-        if port.name in self._ports:
-            raise ValueError('Port "%s" already exists' % port.name)
+            if port.name in self._ports:
+                raise ValueError('Port "%s" already exists' % port.name)
 
-        if port.component is not None and port.component != self._component:
-            raise ValueError('Port "%s" is already attached to Component "%s"' %
-                             (port.name, port.component.name))
+            if port.component is not None and port.component != self._component:
+                raise ValueError('Port "%s" is already attached to Component "%s"' %
+                                 (port.name, port.component.name))
 
-        port.component = self._component
-        self._ports[port.name] = port
+            port.component = self._component
+            self._ports[port.name] = port
 
         return self
 
@@ -253,6 +263,12 @@ class PortRegistry(object):
                                  (self._component.name, port_name))
 
         return self._ports[port_name]
+
+    def __setitem__(self, port_name, port):
+        if port.name is None:
+            port.name = port_name
+
+        self.add(port)
 
     def __iter__(self):
         return iter(self._ports.values())

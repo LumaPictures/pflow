@@ -239,19 +239,21 @@ class Component(RuntimeTarget):
         This will not terminate upstream components!
         '''
         if self.is_terminated:
-            raise ValueError('Component "%s" is already terminated' % self.name)
+            return
+        # if self.is_terminated:
+        #     raise ValueError('Component "%s" is already terminated' % self.name)
 
         if ex is not None:
             log.error('Component "%s" is abnormally terminating from %s...' % (self.name,
                                                                                ex.__class__.__name__))
             self.state = ComponentState.ERROR
-
-            # Close all input ports so signal upstream components
-            for input in self.inputs:
-                if input.is_open:
-                    input.close()
         else:
             self.state = ComponentState.TERMINATED
+
+        # Close all input ports
+        for input in self.inputs:
+            if input.is_open:
+                input.close()
 
         self.runtime.terminate_thread()
 
@@ -259,10 +261,13 @@ class Component(RuntimeTarget):
         '''
         Yield execution to scheduler.
         '''
-        self.state = ComponentState.SUSPENDED
-        self.runtime.suspend_thread(seconds)
-        if not self.is_terminated:
-            self.state = ComponentState.ACTIVE
+        if self.is_terminated:
+            self.runtime.suspend_thread(seconds)
+        else:
+            self.state = ComponentState.SUSPENDED
+            self.runtime.suspend_thread(seconds)
+            if not self.is_terminated:
+                self.state = ComponentState.ACTIVE
 
     def __str__(self):
         return ('Component(%s, inputs=%s, outputs=%s)' %
@@ -311,7 +316,10 @@ class Graph(Component):
         for component in components:
             self.components.add(component)
 
-        return self
+        if len(components) > 1:
+            return components
+        else:
+            return components[0]
 
     @property
     def self_starters(self):

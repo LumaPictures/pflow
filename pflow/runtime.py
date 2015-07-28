@@ -60,7 +60,7 @@ class Runtime(object):
         pass
 
     @abstractmethod
-    def suspend_thread(self):
+    def suspend_thread(self, seconds=None):
         '''
         Suspend execution of this thread until the next packet arrives.
         '''
@@ -92,7 +92,7 @@ class SingleThreadedRuntime(Runtime):
                      ', '.join([c.name for c in self_starters]))
 
         def component_runner(component):
-            def _run():
+            def component_loop():
 
                 # Activate component
                 component.state = ComponentState.ACTIVE
@@ -109,10 +109,28 @@ class SingleThreadedRuntime(Runtime):
                         # Suspend execution until there's more data to process.
                         component.suspend()
 
-            return _run
+            return component_loop
 
-        component_threads = [gevent.spawn(component_runner(c)) for c in graph.components]
-        gevent.wait(component_threads)
+        component_threads = dict([(gevent.spawn(component_runner(c)), c)
+                                  for c in graph.components])
+
+        def thread_error_handler(thread):
+            '''
+            Handles component thread exceptions that get raised.
+            This should terminate execution of all other threads and re-raise the error.
+            '''
+            component = component_threads[thread]
+            log.error('Component "%s" failed with %s: %s' % (component.name,
+                                                             thread.exception.__class__.__name__,
+                                                             thread.exception.message))
+
+            gevent.killall(component_threads.keys())
+
+        # Wire up error handler (so that exceptions aren't swallowed)
+        for thread in component_threads.keys():
+            thread.link_exception(thread_error_handler)
+
+        gevent.wait(component_threads.keys())
 
     def send(self, packet, dest_port):
         q = self._recv_queues[dest_port]
@@ -193,7 +211,7 @@ class MultiProcessRuntime(Runtime):
     def receive(self, source_port):
         raise NotImplementedError
 
-    def terminate_thread(self):
+    def terminate_thread(self, seconds=None):
         raise NotImplementedError
 
     def suspend_thread(self, seconds=None):
