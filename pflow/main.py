@@ -1,12 +1,11 @@
+from .runtimes.single_thread import SingleThreadedRuntime  # Need to load before logging
+
 import os
 import sys
 import logging
 
-import argparse
-
 from . import graph
 from .graph import InitialPacketGenerator, Component
-from .runtime import SingleThreadedRuntime
 from .port import InputPort, OutputPort
 from .components import *
 
@@ -104,8 +103,8 @@ class SuperAwesomeDemoGraph(Graph):
         '5' -> DELAY SLEEP_1
         '''
         seed_iip = self.add_component(InitialPacketGenerator(42))
-        limit_iip_1 = self.add_component(InitialPacketGenerator(3))
-        limit_iip_2 = self.add_component(InitialPacketGenerator(3))
+        limit_iip_1 = self.add_component(InitialPacketGenerator(5))
+        limit_iip_2 = self.add_component(InitialPacketGenerator(5))
 
         gen_1 = self.add_component(RandomNumberGenerator('GEN_1'))
         seed_iip.connect(gen_1.inputs['SEED'])
@@ -133,14 +132,11 @@ class SuperAwesomeDemoGraph(Graph):
 
 def main():
     logging.basicConfig(level=logging.INFO)
-    # argp = argparse.ArgumentParser(description='pflow')
-    # args = argp.parse_args()
-
-    log.info('Initializing graph...')
 
     g = SuperAwesomeDemoGraph('AWESOME_1')
     #g = HypeMachineGraph('HYPE_1')
     #g = ProcessSpawningLogger('PROCSPAWN_1')
+
     g.write_graphml(os.path.expanduser('~/demo.graphml'))
 
     rt = SingleThreadedRuntime()

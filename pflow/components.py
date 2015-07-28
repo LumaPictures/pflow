@@ -49,19 +49,25 @@ class Sleep(Component):
     def run(self):
         import time
 
-        packet = self.inputs['IN'].receive()
-
         delay_value = self.inputs['DELAY'].receive_value()
-        if delay_value is not None:
+        if delay_value is None:
+            delay_value = 0
+
+        if delay_value == 0:
+            self.log.warn('Using a %s component with 0 DELAY is the same as using Repeat' %
+                          self.__class__.__name__)
+
+        while not self.is_terminated:
+            packet = self.inputs['IN'].receive()
+
             self.log.debug('Sleeping for %d seconds...' % delay_value)
             self.state = ComponentState.SUSPENDED
             time.sleep(delay_value)
             # self.suspend(delay_value)
-        else:
-            self.log.warn('Using a %s component with no DELAY set is the same as using Repeat' %
-                          self.__class__.__name__)
 
-        self.outputs['OUT'].send(packet)
+            self.outputs['OUT'].send(packet)
+
+            self.suspend()
 
 
 class Split(Component):

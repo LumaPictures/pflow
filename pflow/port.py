@@ -148,6 +148,9 @@ class InputPort(Port):
             self.component.drop(packet)
             return value
 
+    def clear(self):
+        self.component.runtime.clear_port(self)
+
 
 class ArrayPort(BasePort):
     __metaclass__ = ABCMeta

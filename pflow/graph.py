@@ -228,7 +228,9 @@ class Component(RuntimeTarget):
 
     @property
     def is_upstream_terminated(self):
-        return all([c.is_terminated for c in self.upstream])
+        dead_parents = all([c.is_terminated for c in self.upstream])
+        inputs_have_data = any([self.runtime.port_has_data(p) for p in self.inputs])
+        return dead_parents and not inputs_have_data
 
     @property
     def is_terminated(self):
@@ -254,6 +256,7 @@ class Component(RuntimeTarget):
 
         # Close all input ports
         for input in self.inputs:
+            input.clear()
             if input.is_open:
                 input.close()
 
