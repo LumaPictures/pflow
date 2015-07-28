@@ -99,7 +99,7 @@ class SingleThreadedRuntime(Runtime):
 
                 while not component.is_terminated:
 
-                    # Run the componnet
+                    # Run the component
                     component.run()
 
                     if component.is_upstream_terminated:

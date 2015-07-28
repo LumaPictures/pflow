@@ -4,11 +4,73 @@ import logging
 import argparse
 
 from . import graph
-from .graph import InitialPacketGenerator
+from .graph import InitialPacketGenerator, Component
 from .runtime import SingleThreadedRuntime
+from .port import InputPort, OutputPort
 from .components import Graph, Repeat, RandomNumberGenerator, ConsoleLineWriter, Multiply, Sleep
 
 log = logging.getLogger(__name__)
+
+
+class HypeMachinePopularTracksReader(Component):
+    def initialize(self):
+        self.inputs.add(InputPort('API_KEY', type_=str))
+        self.inputs.add(InputPort('COUNT', optional=True, type_=int))
+        self.outputs.add(OutputPort('OUT'))
+
+    def run(self):
+        import requests
+
+        api_key = self.inputs['API_KEY'].receive().value
+
+        count_packet = self.inputs['COUNT'].receive()
+        if count_packet is not None:
+            count = count_packet.value
+        else:
+            count = 10
+
+        response = requests.get('https://api.hypem.com/v2/tracks?sort=latest&key=%s&count=%d' %
+                                (api_key, count))
+        tracks = response.json()
+
+        for track in tracks:
+            track_packet = self.create_packet(track)
+            self.outputs['OUT'].send(track_packet)
+            self.suspend()
+
+
+class HypeMachineTrackStringifier(Component):
+    def initialize(self):
+        self.inputs.add(InputPort('IN'))
+        self.outputs.add(OutputPort('OUT'))
+
+    def run(self):
+        track_packet = self.inputs['IN'].receive()
+        track = track_packet.value
+
+        if not (track['artist'] and track['title']):
+            self.drop(track_packet)
+        else:
+            transformed = '%(artist)s - %(title)s' % track
+            self.outputs['OUT'].send(self.create_packet(transformed))
+
+
+class HypeMachineGraph(Graph):
+    def initialize(self):
+        api_key_iip = InitialPacketGenerator('swagger')
+        count_iip = InitialPacketGenerator(50)
+
+        hype_1 = HypeMachinePopularTracksReader('HYPE_1')
+        api_key_iip.connect(hype_1.inputs['API_KEY'])
+        count_iip.connect(hype_1.inputs['COUNT'])
+
+        str_1 = HypeMachineTrackStringifier('STR_1')
+        log_1 = ConsoleLineWriter('LOG_1')
+
+        hype_1.outputs['OUT'].connect(str_1.inputs['IN'])
+        str_1.outputs['OUT'].connect(log_1.inputs['IN'])
+
+        self.add_component(api_key_iip, count_iip, hype_1, str_1, log_1)
 
 
 class SuperAwesomeDemoGraph(Graph):
@@ -61,13 +123,14 @@ class SuperAwesomeDemoGraph(Graph):
 
 
 def main():
-    logging.basicConfig(level=logging.DEBUG)
-    argp = argparse.ArgumentParser(description='pflow')
-    args = argp.parse_args()
+    logging.basicConfig(level=logging.INFO)
+    # argp = argparse.ArgumentParser(description='pflow')
+    # args = argp.parse_args()
 
     log.info('Initializing graph...')
 
-    g = SuperAwesomeDemoGraph('AWESOME_1')
+    #g = SuperAwesomeDemoGraph('AWESOME_1')
+    g = HypeMachineGraph('HYPE_1')
     g.write_graphml('demo.graphml')
 
     rt = SingleThreadedRuntime()

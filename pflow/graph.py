@@ -204,7 +204,7 @@ class Component(RuntimeTarget):
         '''
         Drop a Packet.
         '''
-        raise NotImplementedError
+        #raise NotImplementedError
 
     def validate(self):
         '''
