@@ -202,7 +202,10 @@ class OutputPort(Port):
 
         :param packet: the Packet to send over this output port.
         '''
-        self._check_ready_state()
+        if self.optional and not self.is_connected:
+            return
+        else:
+            self._check_ready_state()
 
         runtime = self.component.runtime
         runtime.send(packet, self.target_port)

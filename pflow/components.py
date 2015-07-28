@@ -49,8 +49,6 @@ class Sleep(Component):
     def run(self):
         import time
 
-        raise ValueError('foo')
-
         packet = self.inputs['IN'].receive()
 
         delay_value = self.inputs['DELAY'].receive_value()
@@ -58,6 +56,7 @@ class Sleep(Component):
             log.debug('%s: Sleeping for %d seconds...' % (self.name, delay_value))
             self.state = ComponentState.SUSPENDED
             time.sleep(delay_value)
+            # self.suspend(delay_value)
 
         self.outputs['OUT'].send(packet)
 

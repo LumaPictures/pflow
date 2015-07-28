@@ -143,6 +143,9 @@ class Component(RuntimeTarget):
     def state(self, new_state):
         old_state = self._state
 
+        if old_state == new_state:
+            return
+
         # Ensure state transition is a valid one.
         if (old_state, new_state) not in self._valid_transitions:
             raise exc.ComponentStateError('Invalid state transition for component "%s": %s -> %s' %
@@ -240,8 +243,6 @@ class Component(RuntimeTarget):
         '''
         if self.is_terminated:
             return
-        # if self.is_terminated:
-        #     raise ValueError('Component "%s" is already terminated' % self.name)
 
         if ex is not None:
             log.error('Component "%s" is abnormally terminating from %s...' % (self.name,

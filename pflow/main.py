@@ -101,9 +101,9 @@ class SuperAwesomeDemoGraph(Graph):
         rpt_1 = self.add_component(Repeat('RPT_1'))
         gen_1.outputs['OUT'].connect(rpt_1.inputs['IN'])
 
-        mul_1 = Multiply('MUL_1')
+        mul_1 = self.add_component(Multiply('MUL_1'))
 
-        sleep_iip_delay_1 = self.add_component(InitialPacketGenerator(5))
+        sleep_iip_delay_1 = self.add_component(InitialPacketGenerator(1))
         sleep_1 = self.add_component(Sleep('SLEEP_1'))
         sleep_iip_delay_1.connect(sleep_1.inputs['DELAY'])
         gen_2.outputs['OUT'].connect(sleep_1.inputs['IN'])

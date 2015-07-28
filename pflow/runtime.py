@@ -93,21 +93,26 @@ class SingleThreadedRuntime(Runtime):
 
         def component_runner(component):
             def component_loop():
+                try:
+                    while not component.is_terminated:
 
-                # Activate component
-                component.state = ComponentState.ACTIVE
+                        # Activate component
+                        component.state = ComponentState.ACTIVE
 
-                while not component.is_terminated:
+                        # Run the component
+                        component.run()
 
-                    # Run the component
-                    component.run()
+                        if component.is_upstream_terminated:
+                            # Terminate when all upstream components have terminated and there's no more data to process.
+                            component.terminate()
+                        else:
+                            # Suspend execution until there's more data to process.
+                            component.suspend()
 
-                    if component.is_upstream_terminated:
-                        # Terminate when all upstream components have terminated and there's no more data to process.
+                except KeyboardInterrupt:
+                    if not component.is_terminated:
+                        log.warn('^C pressed - Terminating component "%s"...' % component.name)
                         component.terminate()
-                    else:
-                        # Suspend execution until there's more data to process.
-                        component.suspend()
 
             return component_loop
 
@@ -134,6 +139,7 @@ class SingleThreadedRuntime(Runtime):
 
     def send(self, packet, dest_port):
         q = self._recv_queues[dest_port]
+        log.debug('Sending packet to %s' % dest_port)
         q.put(packet)
 
     def receive(self, source_port):
@@ -147,6 +153,7 @@ class SingleThreadedRuntime(Runtime):
                 component = source_port.component
                 if component.is_upstream_terminated:
                     # No more data left to receive and upstream has terminated.
+                    log.debug('Terminating dead component "%s" on receive()' % component.name)
                     component.terminate()
                 else:
                     log.debug('Waiting for packet on %s' % source_port)
@@ -171,7 +178,7 @@ class SingleThreadedRuntime(Runtime):
             gevent.monkey.patch_all(socket=True,  # socket
                                     dns=True,  # socket dns functions
                                     time=True,  # time.sleep
-                                    select=True, # select
+                                    select=True,  # select
                                     aggressive=True,  # select/socket
                                     thread=True,  # thread, threading
                                     os=True,  # os.fork
