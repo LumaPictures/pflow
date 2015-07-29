@@ -2,6 +2,7 @@
 import os
 import uuid
 import logging
+import socket
 
 import requests
 
@@ -44,12 +45,23 @@ class FlowhubClient(object):
                             (response.status_code, response.text))
 
 
+def get_free_tcp_port():
+    sck = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    sck.bind(('', 0))
+    port = sck.getsockname()[1]
+    sck.close()
+    return port
+
+
 if __name__ == '__main__':
     logging.basicConfig(level=logging.DEBUG)
 
-    ws_host = 'localhost'
-    ws_port = 3569
+    ws_host = socket.gethostname()
+    ws_port = get_free_tcp_port()
+    ws_address = 'ws://%s:%d' % (ws_host, ws_port)
+
     # TODO: create websocket server for fbp protocol handling
+    log.info('Creating runtime websocket %s' % ws_address)
 
     label = 'pflow example'
     user_id = os.environ.get('FLOWHUB_USER_ID')
@@ -59,7 +71,7 @@ if __name__ == '__main__':
 
     # Register runtime
     client = FlowhubClient()
-    client.register_runtime(runtime_id, user_id, label, 'ws://%s:%d' % (ws_host, ws_port))
+    client.register_runtime(runtime_id, user_id, label, ws_address)
     client.ping_runtime(runtime_id)
 
     # TODO: keep websocket open and handle requests
