@@ -1,6 +1,9 @@
 import sys
 if 'threading' in sys.modules:
-    raise Exception('threading module loaded before gevent monkey patching!')
+    import gevent.threading
+    import threading
+    if gevent.threading.Lock != threading.Lock:
+        raise RuntimeError('threading module was imported before gevent could monkey patch it!')
 
 import gevent.monkey
 gevent.monkey.patch_all(socket=True,  # socket
