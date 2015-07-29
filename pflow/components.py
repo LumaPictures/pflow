@@ -72,8 +72,6 @@ class Sleep(Component):
         self.outputs.add(OutputPort('OUT'))
 
     def run(self):
-        import time
-
         delay_value = self.inputs['DELAY'].receive()
         if delay_value is None:
             delay_value = 0

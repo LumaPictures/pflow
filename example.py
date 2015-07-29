@@ -1,5 +1,6 @@
 #!/usr/bin/env python
-from pflow.runtimes.single_process import SingleThreadedRuntime  # Need to load before logging
+from pflow.runtimes.single_process import SingleProcessRuntime  # Need to load before logging
+#from pflow.runtimes.multi_process import MultiProcessRuntime
 
 import os
 import sys
@@ -126,20 +127,21 @@ def run_graph(graph):
     log.info('Running graph: %s' % graph.name)
     graph.write_graphml(os.path.expanduser('~/%s.graphml' % graph.name))
 
-    runtime = SingleThreadedRuntime()
+    runtime = SingleProcessRuntime()
+    #runtime = MultiProcessRuntime()
     runtime.execute_graph(graph)
 
 
 def init_logger():
     # File logger
-    logging.basicConfig(level=logging.DEBUG,
+    logging.basicConfig(level=logging.INFO,
                         format='%(asctime)s | %(levelname)-5s | %(name)s: %(message)s',
                         filename='example.log',
                         filemode='w')
 
     # Console logger
     console = logging.StreamHandler()
-    console.setLevel(logging.INFO)
+    console.setLevel(logging.DEBUG)
     console.setFormatter(logging.Formatter('%(levelname)-5s | %(name)s: %(message)s'))
     logging.getLogger('').addHandler(console)
 

@@ -8,15 +8,59 @@ class Runtime(object):
     '''
     __metaclass__ = ABCMeta
 
-    def _inject_runtime(self, graph):
-        # Wire up runtime dependency to all components
+    def __init__(self):
+        import logging
+        self.log = logging.getLogger(self.__class__.__name__)
+
+    def inject_runtime(self, graph):
+        '''
+        Wire up runtime dependency to all components in the graph.
+        '''
         for component in graph.components:
             component.runtime = self
+
+    def get_self_starters(self, graph):
+        '''
+        Gets all self-starter components in the graph.
+        '''
+        self_starters = graph.self_starters
+        if len(self_starters) == 0:
+            self.log.warn('%s is a no-op graph because there are no self-starter components' % graph.name)
+            # raise exc.FlowError('Unable to find any self-starter Components in graph')
+        else:
+            self.log.debug('Self-starter components are: %s' %
+                           ', '.join([c.name for c in self_starters]))
+
+        return self_starters
 
     def is_upstream_terminated(self, component):
         dead_parents = all([c.is_terminated for c in component.upstream])
         inputs_have_data = any([self.port_has_data(p) for p in component.inputs])
         return dead_parents and not inputs_have_data
+
+    def create_component_runner(self, component):
+        from ..core import ComponentState
+
+        def component_loop():
+            while not component.is_terminated:
+
+                # Activate component
+                component.state = ComponentState.ACTIVE
+
+                # Run the component
+                component.run()
+
+                if self.is_upstream_terminated(component):
+                    # Terminate when all upstream components have terminated and there's no more data to process.
+                    component.terminate()
+                else:
+                    # Suspend execution until there's more data to process.
+                    component.suspend()
+
+                    # TODO: Detect condition where all inputs would never be satisfied
+                    # (e.g. an upstream component to a binary operator died)
+
+        return component_loop
 
     @abstractmethod
     def execute_graph(self, graph):
