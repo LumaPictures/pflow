@@ -4,20 +4,20 @@ if 'threading' in sys.modules:
     import threading
     if gevent.threading.Lock != threading.Lock:
         raise RuntimeError('threading module was imported before gevent could monkey patch it!')
-
-import gevent.monkey
-gevent.monkey.patch_all(socket=True,  # socket
-                        dns=True,  # socket dns functions
-                        time=True,  # time.sleep
-                        select=True,  # select
-                        aggressive=True,  # select/socket
-                        thread=True,  # thread, threading
-                        os=True,  # os.fork
-                        ssl=True,
-                        httplib=False,
-                        subprocess=True,
-                        sys=False,  # stdin, stdout, stderr
-                        Event=False)
+else:
+    import gevent.monkey
+    gevent.monkey.patch_all(socket=True,  # socket
+                            dns=True,  # socket dns functions
+                            time=True,  # time.sleep
+                            select=True,  # select
+                            aggressive=True,  # select/socket
+                            thread=True,  # thread, threading
+                            os=True,  # os.fork
+                            ssl=True,
+                            httplib=False,
+                            subprocess=True,
+                            sys=False,  # stdin, stdout, stderr
+                            Event=False)
 
 import collections
 
