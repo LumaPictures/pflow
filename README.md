@@ -27,11 +27,13 @@ or [Flowhub](https://flowhub.io/).
 Run `python setup.py develop` to symlink site-packages to this repo, 
 then run the example graph with `python -m pflow.main`.
 
-## Defining a Component
+## Components
 
-To define a component, override the `initialize` and `run` methods:
+TODO: Improve documentation.
 
-    from pflow.graph import Component, InputPort, OutputPort
+To define a component, subclass `pflow.core.Component` then override the `initialize()` and `run()` methods:
+
+    from pflow.core import Component, InputPort, OutputPort
     
     
     class MySleepComponent(Component):
@@ -48,13 +50,32 @@ To define a component, override the `initialize` and `run` methods:
             time.sleep(5)
             self.outputs['OUT'].send_packet(input_packet)
 
+### Component Design
+
 Here's some general rules of thumb for creating components:
 
-* Components will automatically suspend execution after `run()` completes, and will await the next packet unless there 
-  is no more data to receive_packet and all upstream components have been terminated. In that case, the component will just
-  terminate itself.
-* Call `suspend()` if you need to be explicit about suspending execution (typically done in loops or when waiting for
-  some asynchronous task to complete).
-* Call `terminate()` if you need to be explicit about terminating a component.
-* Unless you are explicitly calling `suspend()` to wait on an async result, and are making a call to a blocking operation
-  (that gevent patches), you should add a `self.state = ComponentState.SUSPENDED` before the call. 
+* The `Component.initialize()` method is used for setting up ports and any initial state.
+* The `Component.run()` method is called by the runtime every time there's a new packet arrives on the `InputPort`
+  and hasn't been received yet.
+* Components will automatically suspend execution after `Component.run()` completes, and will await the next packet
+  unless there is no more data to receive and all upstream components have been terminated. In that case, the component
+  will terminate execution.
+* Call `Component.suspend()` if you need to be explicit about suspending execution (typically done in loops or when 
+  waiting for some asynchronous task to complete).
+* Calls to `InputPort.receive()` or `InputPort.receive_packet()` implicitly call `Component.suspend()` while waiting
+  for data to arrive. Calls to `OutputPort.send()` or `OutputPort.send_packet()` do not have this behavior, however.
+* Call `Component.terminate()` if you need to be explicit about terminating a component.
+* Unless you are explicitly calling `Component.suspend()` to wait on an async result, and are making a call to a 
+  blocking operation (that gevent patches), you should add a `self.state = ComponentState.SUSPENDED` before the call.
+
+### Component States
+
+![Component states](./docs/states.png)
+
+| State | Description |
+| ----- | ----------- |
+| **NOT_STARTED** | Component hasn't received any data yet (initial state) |
+| **ACTIVE** | Component has received data and is actively running |
+| **SUSPENDED** | Component execution has been suspended while it waits for data |
+| **TERMINATED** | Component has terminated execution (final state) |
+| **ERROR** | Component has terminated execution with an error (final state) |

@@ -20,7 +20,7 @@ class ComponentState(Enum):
     # Initial component state before it receives first packet.
     NOT_STARTED = 'NOT_STARTED'
 
-    # Component should still be ACTIVEly receiving data.
+    # Component has received data and is actively running.
     ACTIVE = 'ACTIVE'
 
     # Component processed last data item and is SUSPENDED.

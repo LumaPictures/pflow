@@ -5,7 +5,6 @@
 *.pyo
 *.DS_Store
 *.iml
-*.graphml
 /.idea/
 /*.egg-info/
 /.eggs/
