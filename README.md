@@ -1,9 +1,11 @@
 # pflow
 
+[![Build Status](https://travis-ci.org/Flushot/pflow.svg)](https://travis-ci.org/Flushot/pflow)
+
+[ TODO: Improve documentation ]
+
 Python [flow-based programming](http://www.jpaulmorrison.com/fbp/) implementation that tries to remain as close
 to the "classic" approach as possible.
-
-[![Build Status](https://travis-ci.org/Flushot/pflow.svg)](https://travis-ci.org/Flushot/pflow)
 
 **THIS PROJECT IS STILL IN ITS VERY EARLY STAGES**
 
@@ -29,11 +31,41 @@ or [Flowhub](https://flowhub.io/).
 Run `python setup.py develop` to symlink site-packages to this repo, 
 then run the example graphs with `./example.py`.
 
+## Graphs
+
+To define and execute a graph, subclass `pflow.core.Graph`, override `initialize()` to construct the graph,
+then run it using a `Runtime` implementation:
+
+    from pflow.runtimes.single_process import SingleProcessRuntime
+    from pflow.components import *
+    from pflow.core import Graph
+
+    
+    class MyGraph(Graph):
+        def initialize(self):
+            tail_1 = FileTailReader('TAIL_1')
+            self.set_initial_packet(tail_1.inputs['PATH'], '/var/log/system.log')
+    
+            filter_1 = RegexFilter('FILTER_1')
+            self.set_initial_packet(filter_1.inputs['REGEX'],
+                                    r' (USER|DEAD)_PROCESS: ')
+    
+            self.connect(tail_1.outputs['OUT'], filter_1.inputs['IN'])
+    
+            self.connect(filter_1.outputs['OUT'].connect,
+                         ConsoleLineWriter('LOG_1').inputs['IN'])    
+
+
+    graph = MyGraph('MY_GRAPH_NAME')
+
+    runtime = SingleProcessRuntime()
+    runtime.execute_graph(graph)
+
 ## Components
 
-TODO: Improve documentation.
-
-To define a component, subclass `pflow.core.Component` then override the `initialize()` and `run()` methods:
+You can find some premade components in the `pflow.components` module. If you can't find what you need there,
+you can always create a custom component by subclassing `pflow.core.Component`, then overriding the `initialize()` 
+and `run()` methods:
 
     from pflow.core import Component, InputPort, OutputPort
     
