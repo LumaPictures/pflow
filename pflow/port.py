@@ -104,21 +104,6 @@ class Port(BasePort):
     def is_connected(self):
         pass
 
-    def connect(self, target_port):
-        '''
-        Connect this Port to an InputPort
-        '''
-        if not isinstance(target_port, Port):
-            raise ValueError('target_port must be a Port')
-
-        if target_port.source_port is not None:
-            raise exc.PortError('target_port is already connected to another source')
-
-        self.target_port = target_port
-        target_port.source_port = self
-
-        log.debug('%s connected to %s' % (self, target_port))
-
     @property
     def full_name(self):
         if self.component is not None:
@@ -322,6 +307,7 @@ class PortRegistry(object):
                                  (port, port.component))
 
             port.component = self._component
+            # FIXME: this needs to be ordered
             self._ports[port.name] = port
 
         return self

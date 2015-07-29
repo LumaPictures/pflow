@@ -196,6 +196,32 @@ class Component(RuntimeTarget):
                 (self.name, self.inputs, self.outputs))
 
 
+class InitialPacketGenerator(Component):
+    '''
+    An initial packet (IIP) generator that is connected to an input port
+    of a component.
+
+    This should have no input ports, a single output port, and is used to
+    make the logic easier.
+    '''
+    def __init__(self, value):
+        import uuid
+
+        self.value = value
+        super(InitialPacketGenerator, self).__init__('IIP_GEN_%s' %
+                                                     uuid.uuid4().hex)
+
+    def initialize(self):
+        self.outputs.add(OutputPort('OUT'))
+
+    def run(self):
+        iip = self.create_packet(self.value)
+        self.outputs['OUT'].send_packet(iip)
+
+    def connect(self, target_port):
+        self.outputs['OUT'].connect(target_port)
+
+
 class Graph(Component):
     '''
     Execution graph.
@@ -208,14 +234,39 @@ class Graph(Component):
         self.components = set()  # Nodes
         super(Graph, self).__init__(*args, **kwargs)
 
-    def add_component(self, *components):
-        for component in components:
-            self.components.add(component)
+    def add_component(self, component):
+        if not isinstance(component, Component):
+            raise ValueError('component must be a Component instance')
+        self.components.add(component)
+        return component
 
-        if len(components) > 1:
-            return components
-        else:
-            return components[0]
+    def set_initial_packet(self, port, value):
+        iip = InitialPacketGenerator(value)
+        self.components.add(iip)
+        iip.connect(port)
+        return iip
+
+    def connect(self, source_port, target_port):
+        '''
+        Connect and output port to an input port
+        '''
+        if not isinstance(source_port, (OutputPort, ArrayOutputPort)):
+            raise ValueError('source_port must be an output port')
+        if not isinstance(target_port, (InputPort, ArrayInputPort)):
+            raise ValueError('target_port must be an input port')
+
+        if target_port.source_port is not None:
+            raise exc.PortError('target_port is already connected to '
+                                'another source')
+
+        self.add_component(source_port.component)
+        self.add_component(target_port.component)
+
+        # FIXME: make these private?
+        source_port.target_port = target_port
+        target_port.source_port = source_port
+
+        log.debug('%s connected to %s' % (source_port, target_port))
 
     @property
     def self_starters(self):
@@ -248,6 +299,7 @@ class Graph(Component):
         '''
         return all([component.is_terminated for component in self.components])
 
+    # TODO: move all serializers to their own module / abstract class
     def load_fbp_string(self, fbp_script):
         # TODO: parse fbp string and build graph
         #raise NotImplementedError

@@ -7,31 +7,6 @@ from .core import Graph, Component, ComponentState, \
 log = logging.getLogger(__name__)
 
 
-class InitialPacketGenerator(Component):
-    '''
-    An initial packet (IIP) generator that is connected to an input port
-    of a component.
-
-    This should have no input ports, a single output port, and is used to
-    make the logic easier.
-    '''
-    def __init__(self, value):
-        import uuid
-
-        self.value = value
-        super(InitialPacketGenerator, self).__init__('IIP_GEN_%s' % uuid.uuid4().hex)
-
-    def initialize(self):
-        self.outputs.add(OutputPort('OUT'))
-
-    def run(self):
-        iip = self.create_packet(self.value)
-        self.outputs['OUT'].send_packet(iip)
-
-    def connect(self, target_port):
-        self.outputs['OUT'].connect(target_port)
-
-
 class Repeat(Component):
     '''
     Repeats inputs from IN to OUT

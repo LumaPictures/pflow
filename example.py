@@ -55,33 +55,30 @@ class PopularMusicGraph(Graph):
         '50' -> COUNT HYPE_1 OUT -> IN STR_1(HypeMachineTrackStringifier)
         STR_1 OUT -> IN LOG_1(ConsoleLineWriter)
         '''
-        api_key_iip = self.add_component(InitialPacketGenerator('swagger'))
-        count_iip = self.add_component(InitialPacketGenerator(50))
+        hype_1 = HypeMachinePopularTracksReader('HYPE_1')
+        self.set_initial_packet(hype_1.inputs['API_KEY'], 'swagger')
+        self.set_initial_packet(hype_1.inputs['COUNT'], 50)
 
-        hype_1 = self.add_component(HypeMachinePopularTracksReader('HYPE_1'))
-        api_key_iip.connect(hype_1.inputs['API_KEY'])
-        count_iip.connect(hype_1.inputs['COUNT'])
+        str_1 = HypeMachineTrackStringifier('STR_1')
+        log_1 = ConsoleLineWriter('LOG_1')
 
-        str_1 = self.add_component(HypeMachineTrackStringifier('STR_1'))
-        log_1 = self.add_component(ConsoleLineWriter('LOG_1'))
-
-        hype_1.outputs['OUT'].connect(str_1.inputs['IN'])
-        str_1.outputs['OUT'].connect(log_1.inputs['IN'])
+        self.connect(hype_1.outputs['OUT'], str_1.inputs['IN'])
+        self.connect(str_1.outputs['OUT'], log_1.inputs['IN'])
 
 
 class ProcessSpawningLogger(Graph):
     def initialize(self):
-        file_path_iip = self.add_component(InitialPacketGenerator('/var/log/system.log'))
-        tail_1 = self.add_component(FileTailReader('TAIL_1'))
-        file_path_iip.connect(tail_1.inputs['PATH'])
+        tail_1 = FileTailReader('TAIL_1')
+        self.set_initial_packet(tail_1.inputs['PATH'], '/var/log/system.log')
 
-        filter_regex_iip = self.add_component(InitialPacketGenerator(r' (USER|DEAD)_PROCESS: '))
-        filter_1 = self.add_component(RegexFilter('FILTER_1'))
-        filter_regex_iip.connect(filter_1.inputs['REGEX'])
-        tail_1.outputs['OUT'].connect(filter_1.inputs['IN'])
+        filter_1 = RegexFilter('FILTER_1')
+        self.set_initial_packet(filter_1.inputs['REGEX'],
+                                r' (USER|DEAD)_PROCESS: ')
 
-        log_1 = self.add_component(ConsoleLineWriter('LOG_1'))
-        filter_1.outputs['OUT'].connect(log_1.inputs['IN'])
+        self.connect(tail_1.outputs['OUT'], filter_1.inputs['IN'])
+
+        self.connect(filter_1.outputs['OUT'].connect,
+                     ConsoleLineWriter('LOG_1').inputs['IN'])
 
 
 class SuperAwesomeDemoGraph(Graph):
@@ -94,32 +91,27 @@ class SuperAwesomeDemoGraph(Graph):
         GEN_2 OUT -> IN SLEEP_1(Sleep) OUT -> Y MUL_1 OUT -> IN LOG_1(ConsoleLineWriter)
         '5' -> DELAY SLEEP_1
         '''
-        seed_iip = self.add_component(InitialPacketGenerator(42))
-        limit_iip_1 = self.add_component(InitialPacketGenerator(5))
-        limit_iip_2 = self.add_component(InitialPacketGenerator(5))
+        gen_1 = RandomNumberGenerator('GEN_1')
+        self.set_initial_packet(gen_1.inputs['SEED'], 42)
+        self.set_initial_packet(gen_1.inputs['LIMIT'], 5)
 
-        gen_1 = self.add_component(RandomNumberGenerator('GEN_1'))
-        seed_iip.connect(gen_1.inputs['SEED'])
-        limit_iip_1.connect(gen_1.inputs['LIMIT'])
+        gen_2 = RandomNumberGenerator('GEN_2')
+        self.set_initial_packet(gen_2.inputs['LIMIT'], 5)
 
-        gen_2 = self.add_component(RandomNumberGenerator('GEN_2'))
-        limit_iip_2.connect(gen_2.inputs['LIMIT'])
+        rpt_1 = Repeat('RPT_1')
+        self.connect(gen_1.outputs['OUT'], rpt_1.inputs['IN'])
 
-        rpt_1 = self.add_component(Repeat('RPT_1'))
-        gen_1.outputs['OUT'].connect(rpt_1.inputs['IN'])
+        mul_1 = Multiply('MUL_1')
 
-        mul_1 = self.add_component(Multiply('MUL_1'))
+        sleep_1 = Sleep('SLEEP_1')
+        self.set_initial_packet(sleep_1.inputs['DELAY'], 1)
+        self.connect(gen_2.outputs['OUT'], sleep_1.inputs['IN'])
+        self.connect(sleep_1.outputs['OUT'], mul_1.inputs['Y'])
 
-        sleep_iip_delay_1 = self.add_component(InitialPacketGenerator(1))
-        sleep_1 = self.add_component(Sleep('SLEEP_1'))
-        sleep_iip_delay_1.connect(sleep_1.inputs['DELAY'])
-        gen_2.outputs['OUT'].connect(sleep_1.inputs['IN'])
-        sleep_1.outputs['OUT'].connect(mul_1.inputs['Y'])
+        log_1 = ConsoleLineWriter('LOG_1')
+        self.connect(mul_1.outputs['OUT'], log_1.inputs['IN'])
 
-        log_1 = self.add_component(ConsoleLineWriter('LOG_1'))
-        mul_1.outputs['OUT'].connect(log_1.inputs['IN'])
-
-        rpt_1.outputs['OUT'].connect(mul_1.inputs['X'])
+        self.connect(rpt_1.outputs['OUT'], mul_1.inputs['X'])
 
 
 def run_graph(graph):
