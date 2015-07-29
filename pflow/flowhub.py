@@ -6,6 +6,8 @@ import socket
 
 import requests
 
+from . import utils
+
 log = logging.getLogger(__name__)
 
 
@@ -45,19 +47,11 @@ class FlowhubClient(object):
                             (response.status_code, response.text))
 
 
-def get_free_tcp_port():
-    sck = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    sck.bind(('', 0))
-    port = sck.getsockname()[1]
-    sck.close()
-    return port
-
-
 if __name__ == '__main__':
     logging.basicConfig(level=logging.DEBUG)
 
     ws_host = socket.gethostname()
-    ws_port = get_free_tcp_port()
+    ws_port = utils.get_free_tcp_port()
     ws_address = 'ws://%s:%d' % (ws_host, ws_port)
 
     # TODO: create websocket server for fbp protocol handling

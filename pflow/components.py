@@ -1,5 +1,6 @@
 import logging
 
+from . import utils
 from .core import Graph, Component, ComponentState, \
     InputPort, OutputPort, \
     ArrayInputPort, ArrayOutputPort
@@ -16,10 +17,8 @@ class InitialPacketGenerator(Component):
     make the logic easier.
     '''
     def __init__(self, value):
-        import uuid
-
         self.value = value
-        super(InitialPacketGenerator, self).__init__('IIP_GEN_%s' % uuid.uuid4().hex)
+        super(InitialPacketGenerator, self).__init__('IIP_GEN_%s' % utils.random_id())
 
     def initialize(self):
         self.outputs.add(OutputPort('OUT'))

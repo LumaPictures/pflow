@@ -6,7 +6,8 @@ try:
     from queue import Queue  # 3.x
 except ImportError:
     from Queue import Queue  # 2.x
-from enum import Enum  # 3.x (or enum34 backport
+
+from enum import Enum
 
 from . import exc
 from . import parsefbp
