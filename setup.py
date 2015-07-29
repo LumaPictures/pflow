@@ -13,7 +13,10 @@ install_requires = [
     'gevent',
     'haigha',  # amqp
     'pyparsing',  # fbp grammar
-    'requests'
+
+    # Component-specific stuff
+    'requests',
+    'sh'
 ]
 
 # Test dependencies

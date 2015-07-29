@@ -2,10 +2,10 @@ from abc import ABCMeta, abstractmethod
 
 
 class Runtime(object):
-    '''
+    """
     Schedulers are responsible for starting processes, scheduling execution,
     and forwarding messages on Connections between Processes.
-    '''
+    """
     __metaclass__ = ABCMeta
 
     def __init__(self):
@@ -13,16 +13,16 @@ class Runtime(object):
         self.log = logging.getLogger(self.__class__.__name__)
 
     def inject_runtime(self, graph):
-        '''
+        """
         Wire up runtime dependency to all components in the graph.
-        '''
+        """
         for component in graph.components:
             component.runtime = self
 
     def get_self_starters(self, graph):
-        '''
+        """
         Gets all self-starter components in the graph.
-        '''
+        """
         self_starters = graph.self_starters
         if len(self_starters) == 0:
             self.log.warn('%s is a no-op graph because there are no self-starter components' % graph.name)
@@ -64,9 +64,9 @@ class Runtime(object):
 
     @abstractmethod
     def execute_graph(self, graph):
-        '''
+        """
         Executes a graph by multitasking all component processes and moving messages along queues.
-        '''
+        """
         pass
 
     @abstractmethod
@@ -87,25 +87,25 @@ class Runtime(object):
 
     @abstractmethod
     def terminate_thread(self):
-        '''
+        """
         Terminate this thread.
         It will no longer process packets.
-        '''
+        """
         pass
 
     @abstractmethod
     def suspend_thread(self, seconds=None):
-        '''
+        """
         Suspend execution of this thread until the next packet arrives.
-        '''
+        """
         pass
 
 
 class RuntimeTarget(object):
-    '''
+    """
     Class that can have a Runtime injected into it after graph construction.
     Runtimes implement scheduling behavior.
-    '''
+    """
     __metaclass__ = ABCMeta
 
     @property

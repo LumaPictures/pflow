@@ -4,13 +4,11 @@ from .core import Graph, Component, ComponentState, \
     InputPort, OutputPort, \
     ArrayInputPort, ArrayOutputPort
 
-log = logging.getLogger(__name__)
-
 
 class Repeat(Component):
-    '''
+    """
     Repeats inputs from IN to OUT
-    '''
+    """
     def initialize(self):
         self.inputs.add(InputPort('IN'))
         self.outputs.add(OutputPort('OUT'))
@@ -21,11 +19,11 @@ class Repeat(Component):
 
 
 class Drop(Component):
-    '''
+    """
     Drops all inputs from IN.
 
     This component is a sink that acts like /dev/null
-    '''
+    """
     def initialize(self):
         self.inputs.add(InputPort('IN'))
 
@@ -35,10 +33,10 @@ class Drop(Component):
 
 
 class Sleep(Component):
-    '''
+    """
     Repeater that sleeps for DELAY seconds before
     repeating inputs from IN to OUT.
-    '''
+    """
     def initialize(self):
         self.inputs.add(InputPort('IN'),
                         InputPort('DELAY',
@@ -65,9 +63,9 @@ class Sleep(Component):
 
 
 class Split(Component):
-    '''
+    """
     Splits inputs from IN to OUT[]
-    '''
+    """
     def initialize(self):
         self.inputs.add(InputPort('IN'))
         self.outputs.add(ArrayOutputPort('OUT', 10))
@@ -79,10 +77,10 @@ class Split(Component):
 
 
 class RegexFilter(Component):
-    '''
+    """
     Filters strings on IN against regex REGEX, sending matches to OUT
     and dropping non-matches.
-    '''
+    """
     def initialize(self):
         self.inputs.add(InputPort('IN',
                                   type_=str,
@@ -114,9 +112,9 @@ class RegexFilter(Component):
 
 
 class Concat(Component):
-    '''
+    """
     Concatenates inputs from IN[] into OUT
-    '''
+    """
     def initialize(self):
         self.inputs.add(ArrayInputPort('IN', 10))
         self.outputs.add(OutputPort('OUT'))
@@ -145,10 +143,10 @@ class Multiply(Component):
 
 
 class FileTailReader(Component):
-    '''
+    """
     Tails a file specified in input port PATH and follows it,
     emitting new lines that are added to output port OUT.
-    '''
+    """
     def initialize(self):
         self.inputs.add(InputPort('PATH',
                                   description='File to tail',
@@ -174,11 +172,11 @@ class FileTailReader(Component):
 
 
 class ConsoleLineWriter(Component):
-    '''
+    """
     Writes everything from IN to the console.
 
     This component is a sink.
-    '''
+    """
     def initialize(self):
         self.inputs.add(InputPort('IN'))
 
@@ -188,31 +186,29 @@ class ConsoleLineWriter(Component):
 
 
 class LogTap(Graph):
-    '''
+    """
     Taps an input stream by receiving inputs from IN, sending them
     to the console log, and forwarding them to OUT.
-    '''
+    """
     def initialize(self):
         self.inputs.add(InputPort('IN'))
         self.outputs.add(OutputPort('OUT'))
 
-        tapper = Split('TAP')
-        logger = ConsoleLineWriter('LOG')
-        self.add_component(tapper, logger)
+        tap = Split('TAP')
+        log = ConsoleLineWriter('LOG')
 
-        # Wire shit up
-        self.inputs['IN'].connect(tapper.inputs['IN'])
-        tapper.outputs['OUT'][0].connect(self.outputs['OUT'])
-        tapper.outputs['OUT'][1].connect(logger.inputs['IN'])
+        self.connect(self.inputs['IN'], tap.inputs['IN'])
+        self.connect(tap.outputs['OUT'][0], self.outputs['OUT'])
+        self.connect(tap.outputs['OUT'][1], log.inputs['IN'])
 
 
 class RandomNumberGenerator(Component):
-    '''
+    """
     Generates an sequence of random numbers, sending
     them all to the OUT port.
 
     This component is a generator.
-    '''
+    """
     def initialize(self):
         self.inputs.add(InputPort('SEED',
                                   type_=int,

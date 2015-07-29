@@ -41,12 +41,12 @@ class ComponentState(Enum):
 
 
 class Component(RuntimeTarget):
-    '''
+    """
     Component instances are "process" nodes in a flow-based digraph.
 
     Each Component has zero or more input and output ports, which are
     connected to other Components through Ports.
-    '''
+    """
     __metaclass__ = ABCMeta
 
     # Valid state transitions for components
@@ -100,9 +100,9 @@ class Component(RuntimeTarget):
 
     @property
     def upstream(self):
-        '''
+        """
         Immediate upstream components.
-        '''
+        """
         upstream = set()
 
         for port in self.inputs:
@@ -113,9 +113,9 @@ class Component(RuntimeTarget):
 
     @property
     def downstream(self):
-        '''
+        """
         Immediate downstream components.
-        '''
+        """
         downstream = set()
 
         for port in self.outputs:
@@ -126,16 +126,16 @@ class Component(RuntimeTarget):
 
     # @abstractmethod
     def initialize(self):
-        '''
+        """
         Initialization code necessary to define this component.
-        '''
+        """
         pass
 
     @abstractmethod
     def run(self):
-        '''
+        """
         This method is called any time the port is open and a new Packet arrives.
-        '''
+        """
         pass
 
     def create_packet(self, value=None):
@@ -145,24 +145,24 @@ class Component(RuntimeTarget):
         return packet
 
     def drop(self, packet):
-        '''
+        """
         Drop a Packet.
-        '''
+        """
         #raise NotImplementedError
 
     @property
     def is_terminated(self):
-        '''
+        """
         Has this component been terminated?
-        '''
+        """
         return self.state in (ComponentState.TERMINATED,
                               ComponentState.ERROR)
 
     def terminate(self, ex=None):
-        '''
+        """
         Terminate execution for this component.
         This will not terminate upstream components!
-        '''
+        """
         if self.is_terminated:
             return
 
@@ -173,17 +173,17 @@ class Component(RuntimeTarget):
             self.state = ComponentState.TERMINATED
 
         # Close all input ports
-        for input in self.inputs:
-            input.clear()
-            if input.is_open():
-                input.close()
+        for inp in self.inputs:
+            inp.clear()
+            if inp.is_open():
+                inp.close()
 
         self.runtime.terminate_thread()
 
     def suspend(self, seconds=None):
-        '''
+        """
         Yield execution to scheduler.
-        '''
+        """
         if self.is_terminated:
             self.runtime.suspend_thread(seconds)
         else:
@@ -198,13 +198,13 @@ class Component(RuntimeTarget):
 
 
 class InitialPacketGenerator(Component):
-    '''
+    """
     An initial packet (IIP) generator that is connected to an input port
     of a component.
 
     This should have no input ports, a single output port, and is used to
     make the logic easier.
-    '''
+    """
     def __init__(self, value):
         self.value = value
         super(InitialPacketGenerator, self).__init__('IIP_GEN_%s' %
@@ -218,11 +218,11 @@ class InitialPacketGenerator(Component):
 
 
 class Graph(Component):
-    '''
+    """
     Execution graph.
 
     This can also be used as a subgraph for composite components.
-    '''
+    """
     __metaclass__ = ABCMeta
 
     def __init__(self, *args, **kwargs):
@@ -237,14 +237,13 @@ class Graph(Component):
 
     def set_initial_packet(self, port, value):
         iip = InitialPacketGenerator(value)
-        self.components.add(iip)
         self.connect(iip.outputs['OUT'], port)
         return iip
 
     def connect(self, source_port, target_port):
-        '''
+        """
         Connect and output port to an input port
-        '''
+        """
         if not isinstance(source_port, (OutputPort, ArrayOutputPort)):
             raise ValueError('source_port must be an output port')
         if not isinstance(target_port, (InputPort, ArrayInputPort)):
@@ -265,9 +264,9 @@ class Graph(Component):
 
     @property
     def self_starters(self):
-        '''
+        """
         Returns a set of all self-starter components.
-        '''
+        """
         # Has only disconnected optional inputs
         def is_self_starter_input(input_port):
             return (input_port.optional and
@@ -290,9 +289,9 @@ class Graph(Component):
 
     @property
     def is_terminated(self):
-        '''
+        """
         Has this graph been terminated?
-        '''
+        """
         return all([component.is_terminated for component in self.components])
 
     # TODO: move all serializers to their own module / abstract class
@@ -315,19 +314,19 @@ class Graph(Component):
             self.load_json_dict(json_dict)
 
     def write_graphml(self, file_path):
-        '''
+        """
         Writes this Graph as a *.graphml file.
 
         This is useful for debugging network configurations that are hard
         to visualize purely with code.
 
         :param file_path: the file to write to (should have a .graphml extension)
-        '''
+        """
         import networkx as nx
 
         graph = nx.DiGraph()
 
-        def _build_nodes(components):
+        def build_nodes(components):
             visited_nodes = set()
 
             for component in components:
@@ -343,7 +342,7 @@ class Graph(Component):
 
                 graph.node[component.name].update(node_attribs)
 
-        def _build_edges(components, visited_nodes=None):
+        def build_edges(components, visited_nodes=None):
             if visited_nodes is None:
                 visited_nodes = set()
 
@@ -369,11 +368,11 @@ class Graph(Component):
 
                     visited_nodes.add(component)
 
-                _build_edges(next_components, visited_nodes)
+                build_edges(next_components, visited_nodes)
 
         self.log.debug('Building nx graph...')
-        _build_nodes(self.components)
-        _build_edges(self.components)
+        build_nodes(self.components)
+        build_edges(self.components)
 
         self.log.debug('Writing graph to "%s"...' % file_path)
         nx.write_graphml(graph, file_path)

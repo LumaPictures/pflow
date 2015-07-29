@@ -1,9 +1,13 @@
 #!/usr/bin/env python
-from pflow.runtimes.single_process import SingleProcessRuntime  # Need to load before logging
-#from pflow.runtimes.multi_process import MultiProcessRuntime
-
 import os
-import sys
+use_multi_process = (os.environ.get('PFLOW_MULTIPROCESS', '') == '1')
+
+if use_multi_process:
+    from pflow.runtimes.multi_process import MultiProcessRuntime as RuntimeImpl
+else:
+    # Need to load before logging
+    from pflow.runtimes.single_process import SingleProcessRuntime as RuntimeImpl
+
 import logging
 
 from pflow.components import *
@@ -51,11 +55,11 @@ class HypeMachineTrackStringifier(Component):
 
 class PopularMusicGraph(Graph):
     def initialize(self):
-        '''
+        """
         'swagger' -> API_KEY HYPE_1(HypeMachinePopularTracksReader)
         '50' -> COUNT HYPE_1 OUT -> IN STR_1(HypeMachineTrackStringifier)
         STR_1 OUT -> IN LOG_1(ConsoleLineWriter)
-        '''
+        """
         hype_1 = HypeMachinePopularTracksReader('HYPE_1')
         self.set_initial_packet(hype_1.inputs['API_KEY'], 'swagger')
         self.set_initial_packet(hype_1.inputs['COUNT'], 50)
@@ -84,14 +88,14 @@ class ProcessSpawningLogger(Graph):
 
 class SuperAwesomeDemoGraph(Graph):
     def initialize(self):
-        '''
+        """
         '42' -> SEED GEN_1(RandomNumberGenerator)
         '3' -> LIMIT GEN_1
         '3' -> LIMIT GEN_2(RandomNumberGenerator)
         GEN_1 OUT -> IN RPT_1(Repeat) -> X MUL_1(Multiply)
         GEN_2 OUT -> IN SLEEP_1(Sleep) OUT -> Y MUL_1 OUT -> IN LOG_1(ConsoleLineWriter)
         '5' -> DELAY SLEEP_1
-        '''
+        """
         gen_1 = RandomNumberGenerator('GEN_1')
         self.set_initial_packet(gen_1.inputs['SEED'], 42)
         self.set_initial_packet(gen_1.inputs['LIMIT'], 5)
@@ -116,17 +120,18 @@ class SuperAwesomeDemoGraph(Graph):
 
 
 def run_graph(graph):
+    log.info('Runtime is: %s' % RuntimeImpl.__name__)
+
     log.info('Running graph: %s' % graph.name)
     graph.write_graphml(os.path.expanduser('~/%s.graphml' % graph.name))
 
-    runtime = SingleProcessRuntime()
-    #runtime = MultiProcessRuntime()
+    runtime = RuntimeImpl()
     runtime.execute_graph(graph)
 
 
 def init_logger():
     # File logger
-    logging.basicConfig(level=logging.INFO,
+    logging.basicConfig(level=logging.DEBUG,
                         format='%(asctime)s | %(levelname)-5s | %(name)s: %(message)s',
                         filename='example.log',
                         filemode='w')

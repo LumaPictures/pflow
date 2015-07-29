@@ -11,13 +11,13 @@ from .base import Runtime
 
 
 class MultiProcessRuntime(Runtime):
-    '''
+    """
     Executes a graph in parallel using multiple processes, where each component is run in
     its own process.
 
     This runtime is useful for work that needs to take advantage of multicore execution
     and is best suited for components that may tend to be CPU bound.
-    '''
+    """
     def __init__(self):
         super(MultiProcessRuntime, self).__init__()
         self._recv_queues = collections.defaultdict(mp.Queue)

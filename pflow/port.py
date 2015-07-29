@@ -5,7 +5,6 @@ try:
     from queue import Queue  # 3.x
 except ImportError:
     from Queue import Queue  # 2.x
-from enum import Enum  # 3.x (or enum34 backport
 
 from . import exc
 
@@ -13,9 +12,9 @@ log = logging.getLogger(__name__)
 
 
 class Packet(object):
-    '''
+    """
     Information packet (IP)
-    '''
+    """
     def __init__(self, value):
         self.value = value
         self._owner = None  # Component that owns this
@@ -35,25 +34,25 @@ class Packet(object):
 
 
 class BracketPacket(Packet):
-    '''
+    """
     Special packet used for bracketing.
-    '''
+    """
     __metaclass__ = ABCMeta
 
 
 class StartBracket(BracketPacket):
-    '''
+    """
     Start of bracketed data.
-    '''
+    """
     def __init__(self):
         # HACK
         super(StartBracket, self).__init__('__BRACKET_MAGIC_VALUE:START__')
 
 
 class EndBracket(BracketPacket):
-    '''
+    """
     End of bracketed data.
-    '''
+    """
     def __init__(self):
         # HACK
         super(EndBracket, self).__init__('__BRACKET_MAGIC_VALUE:END__')
@@ -132,10 +131,10 @@ class Port(BasePort):
 
 
 class InputPort(Port):
-    '''
+    """
     Port that is defined on the input side of a component.
     Leads from either an OutputPort of an upstream component or an initial Packet.
-    '''
+    """
     def __init__(self, name='IN', **kwargs):
         super(InputPort, self).__init__(name, **kwargs)
 
@@ -144,11 +143,11 @@ class InputPort(Port):
                 self.source_port is not None)
 
     def receive_packet(self):
-        '''
+        """
         Receive the next Packet from this input port.
 
         :return: Packet that was received or None if EOF
-        '''
+        """
         # Optional port with no connection
         if self.optional and not self.is_connected():
             return None
@@ -189,9 +188,9 @@ class ArrayPort(BasePort):
         self.allocate()
 
     def allocate(self):
-        '''
+        """
         Allocate array port.
-        '''
+        """
         self._ports = []
         port_class = self.get_port_class()
         for i in range(self._max_ports):
@@ -216,10 +215,10 @@ class ArrayInputPort(ArrayPort):
 
 
 class OutputPort(Port):
-    '''
+    """
     Port that is defined on the output side of a Component.
     Leads into an InputPort of a downstream component.
-    '''
+    """
     def __init__(self, name='OUT', **kwargs):
         super(OutputPort, self).__init__(name, **kwargs)
         self._bracket_depth = 0
@@ -229,11 +228,11 @@ class OutputPort(Port):
                 self.target_port is not None)
 
     def send_packet(self, packet):
-        '''
+        """
         Send a single Packet over this output port.
 
         :param packet: the Packet to send over this output port.
-        '''
+        """
         if self.optional and not self.is_connected():
             return
         else:
@@ -278,9 +277,9 @@ class ArrayOutputPort(ArrayPort):
 
 
 class PortRegistry(object):
-    '''
+    """
     Per-component port registry descriptor.
-    '''
+    """
     def __init__(self, component, *required_superclasses):
         self._ports = {}
         self._component = component
@@ -291,9 +290,9 @@ class PortRegistry(object):
         self._required_superclasses = required_superclasses
 
     def add(self, *ports):
-        '''
+        """
         Add a new port to the registry.
-        '''
+        """
         for port in ports:
             if not isinstance(port, self._required_superclasses):
                 raise ValueError('%s must be an instance of: %s' %
@@ -313,9 +312,9 @@ class PortRegistry(object):
         return self
 
     def __getitem__(self, port_name):
-        '''
+        """
         Get a port from the registry by name (using [] notation).
-        '''
+        """
         if port_name not in self._ports:
             raise AttributeError('%s does not have a port named "%s"' %
                                  (self._component, port_name))

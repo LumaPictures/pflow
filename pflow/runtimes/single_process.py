@@ -30,12 +30,12 @@ from ..core import ComponentState
 
 
 class SingleProcessRuntime(Runtime):
-    '''
+    """
     Executes a graph in a single process, where each component is run in its own gevent coroutine.
 
     This low-overhead runtime is useful in environments that are hostile to multiprocessing/threading,
     or when components are mostly I/O bound (i.e. don't need process parallelization).
-    '''
+    """
     def __init__(self):
         super(SingleProcessRuntime, self).__init__()
         self._recv_queues = collections.defaultdict(queue.Queue)
@@ -48,10 +48,10 @@ class SingleProcessRuntime(Runtime):
                            for c in graph.components])
 
         def thread_error_handler(coroutine):
-            '''
+            """
             Handles component coroutine exceptions that get raised.
             This should terminate execution of all other coroutines.
-            '''
+            """
             component = coroutines[coroutine]
             self.log.error('Component "%s" failed with %s: %s' % (component.name,
                                                                   coroutine.exception.__class__.__name__,
