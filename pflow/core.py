@@ -239,6 +239,7 @@ class Graph(Component):
         return self_starters
 
     def run(self):
+        # Handled by runtime
         pass
 
     @property

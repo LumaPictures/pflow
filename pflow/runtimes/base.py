@@ -13,6 +13,11 @@ class Runtime(object):
         for component in graph.components:
             component.runtime = self
 
+    def is_upstream_terminated(self, component):
+        dead_parents = all([c.is_terminated for c in component.upstream])
+        inputs_have_data = any([self.port_has_data(p) for p in component.inputs])
+        return dead_parents and not inputs_have_data
+
     @abstractmethod
     def execute_graph(self, graph):
         '''

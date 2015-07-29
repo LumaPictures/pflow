@@ -33,10 +33,6 @@ from ..core import ComponentState
 log = logging.getLogger(__name__)
 
 
-# TODO: Implement FBP Network Protocol - http://noflojs.org/documentation/protocol/
-# TODO: Scheduling - http://www.jpaulmorrison.com/fbp/schedrls.shtml
-
-
 class SingleThreadedRuntime(Runtime):
     '''
     Processes are are cooperatively multitasked using gevent and run in a single thread.
@@ -46,11 +42,6 @@ class SingleThreadedRuntime(Runtime):
     '''
     def __init__(self):
         self._recv_queues = collections.defaultdict(queue.Queue)
-
-    def is_upstream_terminated(self, component):
-        dead_parents = all([c.is_terminated for c in component.upstream])
-        inputs_have_data = any([self.port_has_data(p) for p in component.inputs])
-        return dead_parents and not inputs_have_data
 
     def execute_graph(self, graph):
         self._inject_runtime(graph)

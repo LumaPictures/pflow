@@ -109,7 +109,8 @@ class Split(Component):
 
 class RegexFilter(Component):
     '''
-    Filters strings on IN against regex REGEX, sending matches to OUT.
+    Filters strings on IN against regex REGEX, sending matches to OUT
+    and dropping non-matches.
     '''
     def initialize(self):
         self.inputs.add(InputPort('IN',
@@ -137,7 +138,7 @@ class RegexFilter(Component):
                 self.log.debug('Matched: "%s"' % packet.value)
                 self.outputs['OUT'].send_packet(packet)
             else:
-                self.log.debug('No match: "%s"' % packet.value)
+                self.log.debug('Dropped: "%s"' % packet.value)
                 self.drop(packet)
 
 
