@@ -1,0 +1,3 @@
+'swagger' -> API_KEY HYPE_1(pflow.components.HypeMachinePopularTracksReader)
+'50' -> COUNT HYPE_1 OUT -> IN STR_1(pflow.components.HypeMachineTrackStringifier)
+STR_1 OUT -> IN LOG_1(pflow.components.ConsoleLineWriter)

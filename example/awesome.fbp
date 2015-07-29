@@ -1,0 +1,9 @@
+#
+# Super Awesome Demo
+#
+'42' -> SEED GEN_1(pflow.components.RandomNumberGenerator)
+'3' -> LIMIT GEN_1
+'3' -> LIMIT GEN_2(pflow.components.RandomNumberGenerator)
+GEN_1 OUT -> IN RPT_1(pflow.components.Repeat) -> X MUL_1(pflow.components.Multiply)
+GEN_2 OUT -> IN SLEEP_1(pflow.components.Sleep) OUT -> Y MUL_1 OUT -> IN LOG_1(pflow.components.ConsoleLineWriter)
+'5' -> DELAY SLEEP_1

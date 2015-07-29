@@ -25,7 +25,7 @@ or [Flowhub](https://flowhub.io/).
 ## Getting Started
 
 Run `python setup.py develop` to symlink site-packages to this repo, 
-then run the example graph with `python -m pflow.main`.
+then run the example graphs with `./example.py`.
 
 ## Components
 

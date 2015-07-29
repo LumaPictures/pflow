@@ -58,7 +58,8 @@ class SingleThreadedRuntime(Runtime):
         # Find all self-starter components in the graph
         self_starters = graph.self_starters
         if len(self_starters) == 0:
-            raise exc.FlowError('Unable to find any self-starter Components in graph')
+            log.warn('%s is a no-op graph because there are no self-starter components' % graph.name)
+            # raise exc.FlowError('Unable to find any self-starter Components in graph')
         else:
             log.debug('Self-starter components are: %s' %
                       ', '.join([c.name for c in self_starters]))

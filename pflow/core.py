@@ -1,5 +1,6 @@
 from abc import ABCMeta, abstractmethod
 import logging
+import json
 
 try:
     from queue import Queue  # 3.x
@@ -48,7 +49,7 @@ class Component(RuntimeTarget):
     __metaclass__ = ABCMeta
 
     # Valid state transitions for components
-    _valid_transitions = (
+    _valid_transitions = frozenset([
         (ComponentState.NOT_STARTED, ComponentState.ACTIVE),
 
         (ComponentState.ACTIVE, ComponentState.SUSPENDED),
@@ -58,7 +59,7 @@ class Component(RuntimeTarget):
         (ComponentState.SUSPENDED, ComponentState.ACTIVE),
         (ComponentState.SUSPENDED, ComponentState.TERMINATED),
         (ComponentState.SUSPENDED, ComponentState.ERROR)
-    )
+    ])
 
     def __init__(self, name):
         if not isinstance(name, basestring):
@@ -122,7 +123,7 @@ class Component(RuntimeTarget):
 
         return downstream
 
-    @abstractmethod
+    # @abstractmethod
     def initialize(self):
         '''
         Initialization code necessary to define this component.
@@ -147,20 +148,6 @@ class Component(RuntimeTarget):
         Drop a Packet.
         '''
         #raise NotImplementedError
-
-    def validate(self):
-        '''
-        Validate component state and the state of all its ports.
-        Raises a FlowError if there was a problem.
-        '''
-        # raise exc.FlowError, 'This component is invalid!'
-        self.log.debug('Validating component...')
-
-        # TODO: Ensure there's at least 1 port defined
-        # TODO: Ensure all ports are connected
-        # TODO: Ensure all non-optional ports have connections
-
-        return self
 
     @property
     def is_terminated(self):
@@ -209,31 +196,6 @@ class Component(RuntimeTarget):
                 (self.name, self.inputs, self.outputs))
 
 
-class InitialPacketGenerator(Component):
-    '''
-    An initial packet (IIP) generator that is connected to an input port
-    of a component.
-
-    This should have no input ports, a single output port, and is used to
-    make the logic easier.
-    '''
-    def __init__(self, value):
-        import uuid
-
-        self.value = value
-        super(InitialPacketGenerator, self).__init__('IIP_GEN_%s' % uuid.uuid4().hex)
-
-    def initialize(self):
-        self.outputs.add(OutputPort('OUT'))
-
-    def run(self):
-        iip = self.create_packet(self.value)
-        self.outputs['OUT'].send_packet(iip)
-
-    def connect(self, target_port):
-        self.outputs['OUT'].connect(target_port)
-
-
 class Graph(Component):
     '''
     Execution graph.
@@ -277,11 +239,6 @@ class Graph(Component):
         return self_starters
 
     def run(self):
-        self.validate()
-        self.log.debug('Executing graph...')
-
-        # TODO: find and run all self-starters
-
         pass
 
     @property
@@ -291,28 +248,23 @@ class Graph(Component):
         '''
         return all([component.is_terminated for component in self.components])
 
-    def validate(self):
-        self.log.debug('Validating graph...')
-
-        # TODO: ensure graph contains no components that aren't in self.components
-        # TODO: validate all components
-        # TODO: ensure all components are connected
-        # TODO: ensure all edges have components
-        # TODO: warn if there's potential deadlocks
-
-        return self
-
     def load_fbp_string(self, fbp_script):
-        # TODO: find python fbp parser
         # TODO: parse fbp string and build graph
-
-        return self
+        #raise NotImplementedError
+        pass
 
     def load_fbp_file(self, file_path):
         with open(file_path, 'r') as f:
             self.load_fbp_string(f.read())
 
-        return self
+    def load_json_dict(self, json_dict):
+        # TODO: parse json dict and build graph
+        raise NotImplementedError
+
+    def load_json_file(self, file_path):
+        with open(file_path) as f:
+            json_dict = json.loads(f.read())
+            self.load_json_dict(json_dict)
 
     def write_graphml(self, file_path):
         '''

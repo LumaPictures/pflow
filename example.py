@@ -1,13 +1,11 @@
-from .runtimes.single_process import SingleThreadedRuntime  # Need to load before logging
+#!/usr/bin/env python
+from pflow.runtimes.single_process import SingleThreadedRuntime  # Need to load before logging
 
 import os
 import sys
 import logging
 
-from . import core
-from .core import InitialPacketGenerator, Component
-from .port import InputPort, OutputPort
-from .components import *
+from pflow.components import *
 
 log = logging.getLogger(__name__)
 
@@ -123,6 +121,7 @@ class SuperAwesomeDemoGraph(Graph):
 
         rpt_1.outputs['OUT'].connect(mul_1.inputs['X'])
 
+
 def run_graph(graph):
     log.info('Running graph: %s' % graph.name)
     graph.write_graphml(os.path.expanduser('~/%s.graphml' % graph.name))
@@ -135,9 +134,13 @@ def main():
     logging.basicConfig(level=logging.INFO)
     logging.getLogger('requests').setLevel(logging.WARN)
 
+    #fbp_graph = Graph('FBP_1')
+    #fbp_graph.load_fbp_file('./example/awesome.fbp')
+
     test_graphs = [
         SuperAwesomeDemoGraph('AWESOME_1'),
         PopularMusicGraph('MUSIC_1'),
+        #fbp_graph,
         #ProcessSpawningLogger('PROCSPAWN_1')
     ]
 

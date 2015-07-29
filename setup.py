@@ -13,7 +13,7 @@ install_requires = [
     'gevent',
     'haigha',  # amqp
     'pyparsing',  # fbp grammar
-    'websocket'
+    'requests'
 ]
 
 # Test dependencies
