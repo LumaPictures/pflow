@@ -1,0 +1,13 @@
+language: python
+before_script:
+  - sudo pip install .
+script: python setup.py test
+branches:
+  only:
+    - master
+notifications:
+  recipients:
+    - chrisl@luma-pictures.com
+  email:
+    on_success: change
+    on_failure: always
