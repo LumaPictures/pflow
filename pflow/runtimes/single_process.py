@@ -105,18 +105,19 @@ class SingleThreadedRuntime(Runtime):
 
     def receive(self, source_port):
         q = self._recv_queues[source_port]
+        component = source_port.component
         while True:
             try:
                 packet = q.get(block=False)
-                log.debug('Received packet on %s' % source_port)
+                log.debug('%s received packet on %s' % (component, source_port))
+                component.state = ComponentState.ACTIVE
                 return packet
             except queue.Empty:
-                component = source_port.component
                 if self.is_upstream_terminated(component):
                     # No more data left to receive_packet and upstream has terminated.
                     component.terminate()
                 else:
-                    log.debug('Waiting for packet on %s' % source_port)
+                    log.debug('%s is waiting for packet on %s' % (component, source_port))
                     component.suspend()
 
     def port_has_data(self, port):

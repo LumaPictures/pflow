@@ -130,9 +130,25 @@ def run_graph(graph):
     runtime.execute_graph(graph)
 
 
-def main():
-    logging.basicConfig(level=logging.INFO)
+def init_logger():
+    # File logger
+    logging.basicConfig(level=logging.DEBUG,
+                        format='%(asctime)s | %(levelname)-5s | %(name)s: %(message)s',
+                        filename='example.log',
+                        filemode='w')
+
+    # Console logger
+    console = logging.StreamHandler()
+    console.setLevel(logging.INFO)
+    console.setFormatter(logging.Formatter('%(levelname)-5s | %(name)s: %(message)s'))
+    logging.getLogger('').addHandler(console)
+
+    # Set verbosity on packages
     logging.getLogger('requests').setLevel(logging.WARN)
+
+
+def main():
+    init_logger()
 
     #fbp_graph = Graph('FBP_1')
     #fbp_graph.load_fbp_file('./example/awesome.fbp')

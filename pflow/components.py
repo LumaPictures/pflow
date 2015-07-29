@@ -86,9 +86,7 @@ class Sleep(Component):
             packet = self.inputs['IN'].receive_packet()
 
             self.log.debug('Sleeping for %d seconds...' % delay_value)
-            self.state = ComponentState.SUSPENDED
-            time.sleep(delay_value)
-            # self.suspend(delay_value)
+            self.suspend(delay_value)
 
             self.outputs['OUT'].send_packet(packet)
 
@@ -193,6 +191,8 @@ class FileTailReader(Component):
 
         self.state = ComponentState.SUSPENDED
         for line in sh.tail('-f', file_path, _iter=True):
+            self.state = ComponentState.ACTIVE
+
             stripped_line = line.rstrip()
             self.log.debug('Tailed line: %s' % stripped_line)
 
