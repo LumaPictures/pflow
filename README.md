@@ -3,6 +3,8 @@
 Python [flow-based programming](http://www.jpaulmorrison.com/fbp/) implementation that tries to remain as close
 to the "classic" approach as possible.
 
+[![Build Status](https://travis-ci.org/Flushot/pflow.svg)](https://travis-ci.org/Flushot/pflow)
+
 **THIS PROJECT IS STILL IN ITS VERY EARLY STAGES**
 
 To quote J. Paul Morrison:

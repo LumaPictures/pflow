@@ -11,7 +11,7 @@ install_requires = [
     'argparse',
     'networkx',  # writing graphml files
     'gevent',
-    'haigha',  # amqp
+    #'haigha',  # amqp
     'pyparsing',  # fbp grammar
 
     # Component-specific stuff
