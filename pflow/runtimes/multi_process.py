@@ -71,7 +71,7 @@ class MultiProcessGraphRuntime(GraphRuntime):
         self.log.debug('Receiving packet on port %s.%s' % (component.name, port_name))
         q = component._in_queues[port_name]
 
-        if self.is_upstream_terminated(component):
+        if self.graph.is_upstream_terminated(component):
             self.log.warn('Port %s.%s has no more data' % (component.name, port_name))
             component.terminate()
 

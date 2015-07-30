@@ -103,7 +103,7 @@ class SingleProcessGraphRuntime(GraphRuntime):
                 component.state = ComponentState.ACTIVE
                 return packet
             except queue.Empty:
-                if self.is_upstream_terminated(component):
+                if self.graph.is_upstream_terminated(component):
                     # No more data left to receive_packet and upstream has terminated.
                     # self.log.warn('Terminating component %s because of dead upstream (recv: %s)!' %
                     #               (component.name, source_port_id))

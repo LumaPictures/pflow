@@ -17,10 +17,10 @@ log = logging.getLogger(__name__)
 
 class HypeMachinePopularTracksReader(Component):
     def initialize(self):
-        self.inputs.add(InputPort('API_KEY', type_=str),
+        self.inputs.add(InputPort('API_KEY', allowed_types=[str]),
                         InputPort('COUNT',
                                   optional=True,
-                                  type_=int))
+                                  allowed_types=[int]))
         self.outputs.add(OutputPort('OUT'))
 
     def run(self):
@@ -132,7 +132,7 @@ def run_graph(graph):
 def init_logger():
     # File logger
     logging.basicConfig(level=logging.DEBUG,
-                        format='%(asctime)s | %(levelname)-5s | %(name)s: %(message)s',
+                        format='%(asctime)s | %(processName)-20s | %(levelname)-5s | %(name)s: %(message)s',
                         filename='example.log',
                         filemode='w')
 
@@ -153,7 +153,7 @@ def main():
     #fbp_graph.load_fbp_file('./example/awesome.fbp')
 
     test_graphs = [
-        SuperAwesomeDemoGraph('AWESOME_1'),
+        #SuperAwesomeDemoGraph('AWESOME_1'),
         PopularMusicGraph('MUSIC_1'),
         #fbp_graph,
         #ProcessSpawningLogger('PROCSPAWN_1')

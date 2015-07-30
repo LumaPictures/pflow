@@ -25,31 +25,6 @@ class GraphRuntime(object):
         for component in graph.components:
             component.runtime = self
 
-    # This method is no longer necessary since we don't have to write our own scheduler (as we had to with greenlets).
-    def get_self_starters(self):
-        """
-        Gets all self-starter components in the graph.
-        """
-        self_starters = self.graph.self_starters
-        if len(self_starters) == 0:
-            self.log.warn('%s is a no-op graph because there are no self-starter components' % self.graph.name)
-            # raise exc.FlowError('Unable to find any self-starter Components in graph')
-        else:
-            self.log.debug('Self-starter components are: %s' %
-                           ', '.join([c.name for c in self_starters]))
-
-        return self_starters
-
-    def is_upstream_terminated(self, component):
-        """
-        Are all of a component's upstream components terminated?
-
-        :param component: the component to check.
-        :return: whether or not the upstream components have been terminated.
-        """
-        dead_parents = all([c.is_terminated for c in component.upstream])
-        return dead_parents
-
     def create_component_runner(self, component):
         """
         Creates a run loop for a component thread.
@@ -71,7 +46,7 @@ class GraphRuntime(object):
                 # Run the component
                 component.run()
 
-                if self.is_upstream_terminated(component):
+                if self.graph.is_upstream_terminated(component):
                     # Terminate when all upstream components have terminated and there's no more data to process.
                     # self.log.warn('Terminating component %s because of dead upstream (loop)!' % component.name)
                     component.terminate()

@@ -60,6 +60,12 @@ then run it using a `GraphRuntime` implementation:
     runtime = SingleProcessGraphRuntime(graph)
     runtime.execute()
 
+Components are connected by their ports by calling `Graph.connect(source_output_port, target_input_port)`.
+
+Any time `Graph.connect()` is called, the components associated with the ports will automatically get added to the
+graph. If (in the rare case) you have a graph with a single component, you'll need to register it by calling
+`Component.add_component()`.
+
 ## Components
 
 You can find some premade components in the `pflow.components` module. If you can't find what you need there,

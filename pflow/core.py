@@ -81,6 +81,9 @@ class Component(RuntimeTarget):
 
     @state.setter
     def state(self, new_state):
+        if not isinstance(new_state, ComponentState):
+            raise ValueError('new_state must be a value from the ComponentState enum')
+
         old_state = self._state
 
         if old_state == new_state:
@@ -98,32 +101,6 @@ class Component(RuntimeTarget):
 
         # TODO: Fire a transition event
 
-    @property
-    def upstream(self):
-        """
-        Immediate upstream components.
-        """
-        upstream = set()
-
-        for port in self.inputs:
-            if port.is_connected():
-                upstream.add(port.source_port.component)
-
-        return upstream
-
-    @property
-    def downstream(self):
-        """
-        Immediate downstream components.
-        """
-        downstream = set()
-
-        for port in self.outputs:
-            if port.is_connected():
-                downstream.add(port.target_port.component)
-
-        return downstream
-
     # @abstractmethod
     def initialize(self):
         """
@@ -139,8 +116,15 @@ class Component(RuntimeTarget):
         pass
 
     def create_packet(self, value=None):
+        """
+        Create a new packet and set self as owner.
+
+        :param value: initial value for the packet.
+        :return: a new Packet.
+        """
         packet = Packet(value)
         packet.owner = self
+
         self.owned_packet_count += 1
         return packet
 
@@ -148,7 +132,13 @@ class Component(RuntimeTarget):
         """
         Drop a Packet.
         """
-        #raise NotImplementedError
+        if not isinstance(packet, Packet):
+            raise ValueError('packet must be a Packet')
+
+        if packet.owner == self:
+            self.owned_packet_count -= 1
+
+        del packet
 
     @property
     def is_terminated(self):
@@ -167,6 +157,9 @@ class Component(RuntimeTarget):
             return
 
         if ex is not None:
+            if not isinstance(ex, Exception):
+                raise ValueError('ex must be an Exception')
+
             self.log.error('Abnormally terminating because of %s...' %
                            ex.__class__.__name__)
             self.state = ComponentState.ERROR
@@ -229,9 +222,53 @@ class Graph(Component):
         self.components = set()  # Nodes
         super(Graph, self).__init__(*args, **kwargs)
 
+    def get_upstream(self, component):
+        """
+        Immediate upstream components.
+        """
+        upstream = set()
+
+        for port in component.inputs:
+            if port.is_connected():
+                upstream.add(port.source_port.component)
+
+        return upstream
+
+    def get_downstream(self, component):
+        """
+        Immediate downstream components.
+        """
+        downstream = set()
+
+        for port in component.outputs:
+            if port.is_connected():
+                downstream.add(port.target_port.component)
+
+        return downstream
+
+    def is_upstream_terminated(self, component):
+        """
+        Are all of a component's upstream components terminated?
+
+        :param component: the component to check.
+        :return: whether or not the upstream components have been terminated.
+        """
+        dead_parents = all([c.is_terminated for c in self.get_upstream(component)])
+        return dead_parents
+
     def add_component(self, component):
         if not isinstance(component, Component):
             raise ValueError('component must be a Component instance')
+
+        # Already added?
+        if component in self.components:
+            return component
+
+        # Unique name?
+        # used_names = set([component.name for component in self.components])
+        # if component.name in used_names:
+        #     raise ValueError('component name "%s" has already been used in %s' % (component.name, used_names))
+
         self.components.add(component)
         return component
 
@@ -240,27 +277,31 @@ class Graph(Component):
         self.connect(iip.outputs['OUT'], port)
         return iip
 
-    def connect(self, source_port, target_port):
+    def connect(self, source_output_port, target_input_port):
         """
-        Connect and output port to an input port
-        """
-        if not isinstance(source_port, (OutputPort, ArrayOutputPort)):
-            raise ValueError('source_port must be an output port')
-        if not isinstance(target_port, (InputPort, ArrayInputPort)):
-            raise ValueError('target_port must be an input port')
+        Connect components by their ports.
 
-        if target_port.source_port is not None:
-            raise exc.PortError('target_port is already connected to '
+        :param source_output_port: the output port on the source component.
+        :param target_input_port: the input port on the target component.
+        """
+        if not isinstance(source_output_port, (OutputPort, ArrayOutputPort)):
+            raise ValueError('source_output_port must be an output port')
+
+        if not isinstance(target_input_port, (InputPort, ArrayInputPort)):
+            raise ValueError('target_input_port must be an input port')
+
+        if target_input_port.source_port is not None:
+            raise exc.PortError('target_input_port is already connected to '
                                 'another source')
 
-        self.add_component(source_port.component)
-        self.add_component(target_port.component)
+        self.add_component(source_output_port.component)
+        self.add_component(target_input_port.component)
 
         # FIXME: make these private?
-        source_port.target_port = target_port
-        target_port.source_port = source_port
+        source_output_port.target_port = target_input_port
+        target_input_port.source_port = source_output_port
 
-        log.debug('%s connected to %s' % (source_port, target_port))
+        log.debug('%s connected to %s' % (source_output_port, target_input_port))
 
     @property
     def self_starters(self):
@@ -285,8 +326,7 @@ class Graph(Component):
         return self_starters
 
     def run(self):
-        # Handled by runtime
-        pass
+        raise RuntimeError('Instead of calling Graph.run(), please use a GraphRuntime to run this Graph')
 
     @property
     def is_terminated(self):
@@ -297,11 +337,17 @@ class Graph(Component):
 
     # TODO: move all serializers to their own module / abstract class
     def load_fbp_string(self, fbp_script):
+        if not isinstance(fbp_script, basestring):
+            raise ValueError('fbp_script must be a string')
+
         # TODO: parse fbp string and build graph
         #raise NotImplementedError
         pass
 
     def load_fbp_file(self, file_path):
+        if not isinstance(file_path, basestring):
+            raise ValueError('file_path must be a string')
+
         with open(file_path, 'r') as f:
             self.load_fbp_string(f.read())
 
@@ -310,6 +356,9 @@ class Graph(Component):
         raise NotImplementedError
 
     def load_json_file(self, file_path):
+        if not isinstance(file_path, basestring):
+            raise ValueError('file_path must be a string')
+
         with open(file_path) as f:
             json_dict = json.loads(f.read())
             self.load_json_dict(json_dict)
@@ -324,6 +373,9 @@ class Graph(Component):
         :param file_path: the file to write to (should have a .graphml extension)
         """
         import networkx as nx
+
+        if not isinstance(file_path, basestring):
+            raise ValueError('file_path must be a string')
 
         graph = nx.DiGraph()
 

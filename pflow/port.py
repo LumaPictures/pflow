@@ -1,5 +1,6 @@
 from abc import ABCMeta, abstractmethod
 import logging
+import collections
 
 try:
     from queue import Queue  # 3.x
@@ -66,18 +67,39 @@ class Port(BasePort):
     __metaclass__ = ABCMeta
 
     # TODO: change type_ to types (to allow for varying data types when bracketing)
-    def __init__(self, name, description=None, optional=False, type_=str):
+    def __init__(self, name, description=None, optional=False, allowed_types=None):
+        """
+        :param name: the unique (per-component) name of this port.
+        :param description: an optional description of what this port is used for.
+        :param optional: is this port optional (i.e. can it be connected to nothing)?
+        :param allowed_types: list/set of allowed Packet data types that can be passed through this port,
+                              or None to allow any.
+        """
         if not isinstance(name, basestring):
             raise ValueError('name must be a string')
 
         self.name = name
+
+        if description is not None and not isinstance(description, basestring):
+            raise ValueError('description must be a string')
+
         self.description = description
+
+        if not isinstance(optional, bool):
+            raise ValueError('optional must be a bool')
+
         self.optional = optional  # Is this port optional?
-        self.type_ = type_  # Data type
+
+        if allowed_types is not None:
+            if not (isinstance(allowed_types, collections.Sequence) and
+                    not isinstance(allowed_types, basestring)):
+                raise ValueError('allowed_types must be a non-string sequence')
+
+            self.allowed_types = set(allowed_types)  # Data types
+        else:
+            self.allowed_types = None
 
         self.component = None  # Owning component
-        self.source_port = None
-        self.target_port = None
         self._is_open = True
 
     def open(self):
@@ -115,6 +137,7 @@ class Port(BasePort):
     def _check_ready_state(self):
         if not self.is_connected() and not self.optional:
             raise exc.PortError('%s must be connected' % self)
+
         if not self.is_open():
             raise exc.PortClosedError('%s is closed' % self)
 
@@ -137,6 +160,7 @@ class InputPort(Port):
     """
     def __init__(self, name='IN', **kwargs):
         super(InputPort, self).__init__(name, **kwargs)
+        self.source_port = None
 
     def is_connected(self):
         return (self.component is not None and
@@ -225,6 +249,7 @@ class OutputPort(Port):
     def __init__(self, name='OUT', **kwargs):
         super(OutputPort, self).__init__(name, **kwargs)
         self._bracket_depth = 0
+        self.target_port = None
 
     def is_connected(self):
         return (self.component is not None and
@@ -321,6 +346,9 @@ class PortRegistry(object):
         """
         Get a port from the registry by name (using [] notation).
         """
+        if not isinstance(port_name, basestring):
+            raise ValueError('key must be a string')
+
         if port_name not in self._ports:
             raise AttributeError('%s does not have a port named "%s"' %
                                  (self._component, port_name))
@@ -330,6 +358,8 @@ class PortRegistry(object):
     def __setitem__(self, port_name, port):
         if port.name is None:
             port.name = port_name
+        elif not isinstance(port.name, basestring):
+            raise ValueError('key must be a string')
 
         self.add(port)
 

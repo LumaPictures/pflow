@@ -40,7 +40,7 @@ class Sleep(Component):
     def initialize(self):
         self.inputs.add(InputPort('IN'),
                         InputPort('DELAY',
-                                  type_=int,
+                                  allowed_types=[int],
                                   description='Number of seconds to delay'))
         self.outputs.add(OutputPort('OUT'))
 
@@ -83,13 +83,13 @@ class RegexFilter(Component):
     """
     def initialize(self):
         self.inputs.add(InputPort('IN',
-                                  type_=str,
+                                  allowed_types=[str],
                                   description='String to filter'),
                         InputPort('REGEX',
-                                  type_=str,
+                                  allowed_types=[str],
                                   description='Regex to use for filtering'))
         self.outputs.add(OutputPort('OUT',
-                                    type_=str,
+                                    allowed_types=[str],
                                     description='String that matched filter'))
 
     def run(self):
@@ -150,7 +150,7 @@ class FileTailReader(Component):
     def initialize(self):
         self.inputs.add(InputPort('PATH',
                                   description='File to tail',
-                                  type_=str))
+                                  allowed_types=[str]))
         self.outputs.add(OutputPort('OUT',
                                     description='Lines that are added to file'))
 
@@ -211,11 +211,11 @@ class RandomNumberGenerator(Component):
     """
     def initialize(self):
         self.inputs.add(InputPort('SEED',
-                                  type_=int,
+                                  allowed_types=[int],
                                   optional=True,
                                   description='Seed value for PRNG'),
                         InputPort('LIMIT',
-                                  type_=int,
+                                  allowed_types=[int],
                                   optional=True,
                                   description='Number of times to iterate (default: infinite)'))
         self.outputs.add(OutputPort('OUT'))
