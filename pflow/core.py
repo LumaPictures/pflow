@@ -265,9 +265,9 @@ class Graph(Component):
             return component
 
         # Unique name?
-        # used_names = set([component.name for component in self.components])
-        # if component.name in used_names:
-        #     raise ValueError('component name "%s" has already been used in %s' % (component.name, used_names))
+        used_names = utils.pluck(self.components, 'name')
+        if component.name in used_names:
+            raise ValueError('Component name "%s" has already been used in this graph' % component.name)
 
         self.components.add(component)
         return component
@@ -294,14 +294,14 @@ class Graph(Component):
             raise exc.PortError('target_input_port is already connected to '
                                 'another source')
 
+        log.debug('%s connected to %s' % (source_output_port, target_input_port))
+
         self.add_component(source_output_port.component)
         self.add_component(target_input_port.component)
 
         # FIXME: make these private?
         source_output_port.target_port = target_input_port
         target_input_port.source_port = source_output_port
-
-        log.debug('%s connected to %s' % (source_output_port, target_input_port))
 
     @property
     def self_starters(self):
