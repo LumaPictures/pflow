@@ -6,10 +6,10 @@ script: python example.py
 branches:
   only:
     - master
-notifications:
-  recipients:
-    - chrisl@luma-pictures.com
-    - chadd@luma-pictures.com
-  email:
-    on_success: change
-    on_failure: always
+#notifications:
+#  recipients:
+#    - chrisl@luma-pictures.com
+#    - chadd@luma-pictures.com
+#  email:
+#    on_success: change
+#    on_failure: always
