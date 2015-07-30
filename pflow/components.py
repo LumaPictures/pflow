@@ -182,6 +182,7 @@ class ConsoleLineWriter(Component):
 
     def run(self):
         message = self.inputs['IN'].receive()
+        #raise ValueError('foo')
         print message
 
 

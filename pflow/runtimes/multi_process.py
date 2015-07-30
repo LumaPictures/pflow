@@ -1,8 +1,15 @@
+import sys
 import collections
 import time
 import multiprocessing as mp
+import traceback
 import json
 from abc import ABCMeta, abstractmethod
+
+try:
+    import cStringIO as StringIO
+except ImportError:
+    import StringIO
 
 try:
     import queue  # 3.x
@@ -26,10 +33,46 @@ class MultiProcessGraphRuntime(GraphRuntime):
     def __init__(self, graph):
         super(MultiProcessGraphRuntime, self).__init__(graph)
         self._packet_serializer = NoopSerializer()
+        self._in_queues = None
+        self._out_queues = None
+
+    def _create_wrapped_runner(self, component):
+        """
+        Wraps the runner so that it shuts down all components when process raises
+        an exception.
+
+        :param component:
+        :return:
+        """
+        run_loop = self.create_component_runner(component)
+
+        def wrapped_runner(*args):
+            import sys
+
+            try:
+                run_loop(*args)
+            except Exception, ex:
+                component.log.exception(ex)
+
+                ex_tb = StringIO.StringIO()
+                traceback.print_exc(file=ex_tb)
+                # TODO: Pass ex_tb back to master process
+
+                component.terminate()
+                for c in self.graph.components:
+                    c.terminate()
+
+                raise ex
+
+        return wrapped_runner
 
     def execute(self):
         self.log.debug('Executing graph %s' % self.graph)
 
+        self._in_queues = {}
+        self._out_queues = {}
+
+        # Create queues for all edges
         edges = set()
         for component in self.graph.components:
             for out_port in component.outputs:
@@ -38,21 +81,27 @@ class MultiProcessGraphRuntime(GraphRuntime):
                                (out_port.target_port.component.name, out_port.target_port.name),
                                mp.Queue()))
 
-        processes = {}
+        # Start all processes
+        self.log.debug('Starting %d processes...' % len(self.graph.components))
+        processes = []
         for component in self.graph.components:
             out_edges = filter(lambda edge: edge[0][0] == component.name, edges)
-            in_edges =  filter(lambda edge: edge[1][0] == component.name, edges)
-            process = mp.Process(target=self.create_component_runner(component),
-                                 args=(dict([(edge[1][1], edge[2]) for edge in in_edges]),    # in_queues
-                                       dict([(edge[0][1], edge[2]) for edge in out_edges])),  # out_queues
-                                 name=component.name)
-            processes[process] = component
+            in_edges  = filter(lambda edge: edge[1][0] == component.name, edges)
 
-        # Start all processes
-        self.log.debug('Starting %d processes...' % len(processes))
-        for process in processes.keys():
+            in_queues = dict([(edge[1][1], edge[2]) for edge in in_edges])
+            self._in_queues[component.name] = in_queues
+
+            out_queues = dict([(edge[0][1], edge[2]) for edge in out_edges])
+            self._out_queues[component.name] = out_queues
+
+            process = mp.Process(target=self._create_wrapped_runner(component),
+                                 args=(in_queues,    # in_queues
+                                       out_queues),  # out_queues
+                                 name=component.name)
+
             process.daemon = True
             process.start()
+            processes.append(process)
 
         # Wait for all processes to terminate
         # TODO: Close ports on dead upstream processes
@@ -64,17 +113,14 @@ class MultiProcessGraphRuntime(GraphRuntime):
 
     def send_port(self, component, port_name, packet):
         self.log.debug('Sending packet to port %s.%s' % (component.name, port_name))
-        q = component._out_queues[port_name]
+
+        q = self._get_outport_queue(component, port_name)
         q.put(self._packet_serializer.serialize(packet))
 
     def receive_port(self, component, port_name):
         self.log.debug('Receiving packet on port %s.%s' % (component.name, port_name))
-        q = component._in_queues[port_name]
 
-        if self.graph.is_upstream_terminated(component):
-            self.log.warn('Port %s.%s has no more data' % (component.name, port_name))
-            component.terminate()
-
+        q = self._get_inport_queue(component, port_name)
         serialized_packet = q.get()
 
         self.log.debug('Packet received on %s.%s: %s' % (component.name, port_name, serialized_packet))
@@ -82,20 +128,50 @@ class MultiProcessGraphRuntime(GraphRuntime):
 
         return packet
 
+    def _get_inport_queue(self, component, port_name):
+        if hasattr(component, '_in_queues'):
+            # Called from component process
+            return component._in_queues[port_name]
+        else:
+            # Called from master process
+            return self._in_queues[component.name][port_name]
+
+    def _get_outport_queue(self, component, port_name):
+        if hasattr(component, '_out_queues'):
+            # Called from component process
+            return component._out_queues[port_name]
+        else:
+            # Called from master process
+            return self._out_queues[component.name][port_name]
+
     def close_input_port(self, component, port_name):
-        if port_name in component._in_queues:
-            q = component._in_queues[port_name]
-            q.close()
+        self.log.warn('Closing input port %s.%s' % (component.name, port_name))
+
+        q = self._get_inport_queue(component, port_name)
+        q.close()
 
     def close_output_port(self, component, port_name):
-        if port_name in component._out_queues:
-            q = component._out_queues[port_name]
-            q.close()
+        self.log.warn('Closing output port %s.%s' % (component.name, port_name))
+
+        q = self._get_outport_queue(component, port_name)
+        q.close()
 
     def terminate_thread(self, component):
+        self.log.info('terminate_thread for %s' % component)
+
         if not component.is_terminated:
             # This will cause the component loop to exit.
             component.state = ComponentState.TERMINATED
+
+        # self.log.info('Closing %d outports for %s...' % (len(component.outputs), component))
+        # for out_port in component.outputs:
+        #     if out_port.is_open():
+        #         out_port.close()
+
+        self.log.info('Closing %d inports for %s...' % (len(component.inputs), component))
+        for in_port in component.inputs:
+            if in_port.is_open():
+                in_port.close()
 
     def suspend_thread(self, seconds=None):
         time.sleep(seconds or 0)

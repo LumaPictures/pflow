@@ -37,6 +37,7 @@ class HypeMachinePopularTracksReader(Component):
         tracks = response.json()
 
         for track in tracks:
+            self.log.debug('Send track: %s' % track)
             self.outputs['OUT'].send(track)
 
 
@@ -47,6 +48,8 @@ class HypeMachineTrackStringifier(Component):
 
     def run(self):
         track = self.inputs['IN'].receive()
+
+        self.log.debug('Recv track: %s' % track)
 
         if track['artist'] and track['title']:
             transformed = '%(artist)s - %(title)s' % track
@@ -138,7 +141,7 @@ def init_logger():
 
     # Console logger
     console = logging.StreamHandler()
-    console.setLevel(logging.DEBUG)
+    console.setLevel(logging.INFO)
     console.setFormatter(logging.Formatter('%(processName)-20s | %(levelname)-5s | %(name)s: %(message)s'))
     logging.getLogger('').addHandler(console)
 

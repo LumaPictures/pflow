@@ -76,7 +76,8 @@ class SingleProcessGraphRuntime(GraphRuntime):
                                                                   coroutine.exception.__class__.__name__,
                                                                   coroutine.exception.message))
 
-            gevent.killall(coroutines.keys())
+            for c in coroutines.values():
+                c.terminate(ex=coroutine.exception)
 
         # Wire up error handler (so that exceptions aren't swallowed)
         for coroutine in coroutines.keys():
@@ -105,8 +106,8 @@ class SingleProcessGraphRuntime(GraphRuntime):
             except queue.Empty:
                 if self.graph.is_upstream_terminated(component):
                     # No more data left to receive_packet and upstream has terminated.
-                    # self.log.warn('Terminating component %s because of dead upstream (recv: %s)!' %
-                    #               (component.name, source_port_id))
+                    self.log.debug('Terminating component %s because of dead upstream (recv: %s)!' %
+                                   (component.name, source_port_id))
                     component.terminate()
                 else:
                     self.log.debug('%s is waiting for packet on %s' % (component, source_port_id))

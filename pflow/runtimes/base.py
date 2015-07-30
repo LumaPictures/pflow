@@ -38,24 +38,25 @@ class GraphRuntime(object):
             component._in_queues = in_queues
             component._out_queues = out_queues
 
-            while not component.is_terminated:
+            try:
+                while not component.is_terminated:
 
-                # Activate component
-                component.state = ComponentState.ACTIVE
+                    # Activate component
+                    component.state = ComponentState.ACTIVE
 
-                # Run the component
-                component.run()
+                    # Run the component
+                    component.run()
 
-                if self.graph.is_upstream_terminated(component):
-                    # Terminate when all upstream components have terminated and there's no more data to process.
-                    # self.log.warn('Terminating component %s because of dead upstream (loop)!' % component.name)
-                    component.terminate()
-                else:
+                    # if self.graph.is_upstream_terminated(component):
+                    #     # Terminate when all upstream components have terminated and there's no more data to process.
+                    #     self.log.debug('Terminating component %s because of dead upstream (loop)!' % component.name)
+                    #     component.terminate()
+                    # else:
                     # Suspend execution until there's more data to process.
                     component.suspend()
 
-                    # TODO: Detect condition where all inputs would never be satisfied
-                    # (e.g. an upstream component to a binary operator died)
+            finally:
+                component.destroy()
 
         return component_loop
 

@@ -303,8 +303,8 @@ class OutputPort(Port):
         if self._bracket_depth != 0:
             raise ValueError('There are %d open brackets on %s' % self)
 
-        if self.component.target_port.is_open():
-            self.component.runtime.close_output_port(self.component.target_port.component, self.name)
+        if self.is_open():
+            self.component.runtime.close_output_port(self.component, self.name)
 
         super(OutputPort, self).close()
 

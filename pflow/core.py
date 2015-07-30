@@ -52,6 +52,7 @@ class Component(RuntimeTarget):
     # Valid state transitions for components
     _valid_transitions = frozenset([
         (ComponentState.NOT_STARTED, ComponentState.ACTIVE),
+        (ComponentState.NOT_STARTED, ComponentState.TERMINATED),
 
         (ComponentState.ACTIVE, ComponentState.SUSPENDED),
         (ComponentState.ACTIVE, ComponentState.TERMINATED),
@@ -114,6 +115,13 @@ class Component(RuntimeTarget):
         This method is called any time the port is open and a new Packet arrives.
         """
         pass
+
+    def destroy(self):
+        """
+        Implementations can override this to call any cleanup code when the component
+        has transitioned to a TERMINATED state and is about to be destroyed.
+        """
+        self.log.debug('Destroyed')
 
     def create_packet(self, value=None):
         """
