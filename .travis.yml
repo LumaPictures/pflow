@@ -1,7 +1,5 @@
 language: python
 sudo: false
-before_script:
-  - pip install .
 script: python example.py
 branches:
   only:
@@ -9,6 +7,7 @@ branches:
 notifications:
   recipients:
     - chrisl@luma-pictures.com
+    - chadd@luma-pictures.com
   email:
     on_success: change
     on_failure: always
