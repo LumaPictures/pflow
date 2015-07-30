@@ -1,5 +1,7 @@
 language: python
 sudo: false
+before_script:
+  - pip install .
 script: python example.py
 branches:
   only:
