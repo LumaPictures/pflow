@@ -160,15 +160,11 @@ class FileTailReader(Component):
         file_path = self.inputs['PATH'].receive()
         self.log.debug('Tailing file: %s' % file_path)
 
-        self.state = ComponentState.SUSPENDED
         for line in sh.tail('-f', file_path, _iter=True):
-            self.state = ComponentState.ACTIVE
-
             stripped_line = line.rstrip()
             self.log.debug('Tailed line: %s' % stripped_line)
 
             self.outputs['OUT'].send(stripped_line)
-            self.suspend()
 
 
 class ConsoleLineWriter(Component):
@@ -239,7 +235,6 @@ class RandomNumberGenerator(Component):
 
             packet = self.create_packet(random_value)
             self.outputs['OUT'].send_packet(packet)
-            self.suspend()
 
             if limit_value is not None:
                 i += 1

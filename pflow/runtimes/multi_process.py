@@ -67,7 +67,7 @@ class MultiProcessGraphRuntime(GraphRuntime):
         return wrapped_runner
 
     def execute(self):
-        self.log.debug('Executing graph %s' % self.graph)
+        self.log.debug('Executing %s' % self.graph)
 
         self._in_queues = {}
         self._out_queues = {}
@@ -115,13 +115,17 @@ class MultiProcessGraphRuntime(GraphRuntime):
         self.log.debug('Sending packet to port %s.%s' % (component.name, port_name))
 
         q = self._get_outport_queue(component, port_name)
+        component.state = ComponentState.SUSP_SEND
         q.put(self._packet_serializer.serialize(packet))
+        component.state = ComponentState.ACTIVE
 
     def receive_port(self, component, port_name):
         self.log.debug('Receiving packet on port %s.%s' % (component.name, port_name))
 
         q = self._get_inport_queue(component, port_name)
+        component.state = ComponentState.SUSP_RECV
         serialized_packet = q.get()
+        component.state = ComponentState.ACTIVE
 
         self.log.debug('Packet received on %s.%s: %s' % (component.name, port_name, serialized_packet))
         packet = self._packet_serializer.deserialize(serialized_packet)
@@ -145,30 +149,23 @@ class MultiProcessGraphRuntime(GraphRuntime):
             return self._out_queues[component.name][port_name]
 
     def close_input_port(self, component, port_name):
-        self.log.warn('Closing input port %s.%s' % (component.name, port_name))
+        self.log.debug('Closing input port %s.%s' % (component.name, port_name))
 
         q = self._get_inport_queue(component, port_name)
         q.close()
 
     def close_output_port(self, component, port_name):
-        self.log.warn('Closing output port %s.%s' % (component.name, port_name))
+        self.log.debug('Closing output port %s.%s' % (component.name, port_name))
 
         q = self._get_outport_queue(component, port_name)
         q.close()
 
     def terminate_thread(self, component):
-        self.log.info('terminate_thread for %s' % component)
-
         if not component.is_terminated:
-            # This will cause the component loop to exit.
+            # This will cause the component loop to exit on the next iteration.
             component.state = ComponentState.TERMINATED
 
-        # self.log.info('Closing %d outports for %s...' % (len(component.outputs), component))
-        # for out_port in component.outputs:
-        #     if out_port.is_open():
-        #         out_port.close()
-
-        self.log.info('Closing %d inports for %s...' % (len(component.inputs), component))
+        self.log.debug('Closing %d inports for %s...' % (len(component.inputs), component))
         for in_port in component.inputs:
             if in_port.is_open():
                 in_port.close()

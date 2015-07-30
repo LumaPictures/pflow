@@ -180,6 +180,8 @@ class InputPort(Port):
 
         :return: Packet that was received or None if EOF
         """
+        from .core import ComponentState
+
         # Optional port with no connection
         if self.optional and not self.is_connected():
             return None
@@ -188,9 +190,6 @@ class InputPort(Port):
 
         runtime = self.component.runtime
         packet = runtime.receive_port(self.component, self.name)
-
-        # TODO: claim ownership
-        # TODO: increment refcount
 
         return packet
 
@@ -269,6 +268,8 @@ class OutputPort(Port):
 
         :param packet: the Packet to send over this output port.
         """
+        from .core import ComponentState
+
         if self.optional and not self.is_connected():
             return
         else:
@@ -276,8 +277,6 @@ class OutputPort(Port):
 
         runtime = self.component.runtime
         runtime.send_port(self.component, self.name, packet)
-
-        # TODO: decrement refcount
 
     def send(self, value):
         packet = self.component.create_packet(value)

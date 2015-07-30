@@ -113,8 +113,9 @@ Here's some general rules of thumb for creating components:
 
 | State | Description |
 | ----- | ----------- |
-| **NOT_STARTED** | Component hasn't received any data yet (initial state) |
-| **ACTIVE** | Component has received data and is actively running |
-| **SUSPENDED** | Component execution has been suspended while it waits for data |
-| **TERMINATED** | Component has terminated execution (final state) |
-| **ERROR** | Component has terminated execution with an error (final state) |
+| **NOT_STARTED** | Component hasn't started because it hasn't received any data yet (initial state). |
+| **ACTIVE** | Component has received data and is actively running. |
+| **SUSP_SEND** | Component is waiting for data to send on its output port. |
+| **SUSP_RECV** | Component is waiting to receive data on its input port. |
+| **TERMINATED** | Component has successfully terminated execution (final state). |
+| **ERROR** | Component has terminated execution because of an error (final state). |

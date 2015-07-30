@@ -37,7 +37,6 @@ class HypeMachinePopularTracksReader(Component):
         tracks = response.json()
 
         for track in tracks:
-            self.log.debug('Send track: %s' % track)
             self.outputs['OUT'].send(track)
 
 
@@ -48,8 +47,6 @@ class HypeMachineTrackStringifier(Component):
 
     def run(self):
         track = self.inputs['IN'].receive()
-
-        self.log.debug('Recv track: %s' % track)
 
         if track['artist'] and track['title']:
             transformed = '%(artist)s - %(title)s' % track
@@ -85,7 +82,7 @@ class ProcessSpawningLogger(Graph):
 
         self.connect(tail_1.outputs['OUT'], filter_1.inputs['IN'])
 
-        self.connect(filter_1.outputs['OUT'].connect,
+        self.connect(filter_1.outputs['OUT'],
                      ConsoleLineWriter('LOG_1').inputs['IN'])
 
 
@@ -123,9 +120,8 @@ class SuperAwesomeDemoGraph(Graph):
 
 
 def run_graph(graph):
-    log.info('Runtime is: %s' % GraphRuntimeImpl.__name__)
+    log.debug('Runtime is: %s' % GraphRuntimeImpl.__name__)
 
-    log.info('Running graph: %s' % graph.name)
     graph.write_graphml(os.path.expanduser('~/%s.graphml' % graph.name))
 
     runtime = GraphRuntimeImpl(graph)
@@ -156,7 +152,7 @@ def main():
     #fbp_graph.load_fbp_file('./example/awesome.fbp')
 
     test_graphs = [
-        #SuperAwesomeDemoGraph('AWESOME_1'),
+        SuperAwesomeDemoGraph('AWESOME_1'),
         PopularMusicGraph('MUSIC_1'),
         #fbp_graph,
         #ProcessSpawningLogger('PROCSPAWN_1')

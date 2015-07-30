@@ -47,13 +47,13 @@ class GraphRuntime(object):
                     # Run the component
                     component.run()
 
-                    # if self.graph.is_upstream_terminated(component):
-                    #     # Terminate when all upstream components have terminated and there's no more data to process.
-                    #     self.log.debug('Terminating component %s because of dead upstream (loop)!' % component.name)
-                    #     component.terminate()
-                    # else:
-                    # Suspend execution until there's more data to process.
-                    component.suspend()
+                    if self.graph.is_upstream_terminated(component) and not component.is_suspended:
+                        # Terminate when all upstream components have terminated and there's no more data to process.
+                        self.log.debug('%s will be terminated because of dead upstream (run loop)' % component)
+                        component.terminate()
+                    else:
+                        # Suspend execution until there's more data to process.
+                        component.suspend()
 
             finally:
                 component.destroy()

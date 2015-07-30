@@ -19,24 +19,22 @@ log = logging.getLogger(__name__)
 
 class ComponentState(Enum):
 
-    # Initial component state before it receives first packet.
+    # Component hasn't started because it hasn't received any data yet (initial state).
     NOT_STARTED = 'NOT_STARTED'
 
     # Component has received data and is actively running.
     ACTIVE = 'ACTIVE'
 
-    # Component processed last data item and is SUSPENDED.
-    # until the next packet arrives.
-    SUSPENDED = 'SUSPENDED'
+    # Component is waiting for data to send on its output port.
+    SUSP_SEND = 'SUSP_SEND'
 
-    # Component has either TERMINATED itself or has processed
-    # the last packet. This component is automatically considered
-    # TERMINATED it: 1) has no more data to process, and 2) all its
-    # upstream components are TERMINATED.
+    # Component is waiting to receive data on its input port.
+    SUSP_RECV = 'SUSP_RECV'
+
+    # Component has successfully terminated execution (final state).
     TERMINATED = 'TERMINATED'
 
-    # Component has been TERMINATED with an ERROR status. This can
-    # happen when an unexpected exception is raised.
+    # Component has terminated execution because of an error (final state).
     ERROR = 'ERROR'
 
 
@@ -54,13 +52,16 @@ class Component(RuntimeTarget):
         (ComponentState.NOT_STARTED, ComponentState.ACTIVE),
         (ComponentState.NOT_STARTED, ComponentState.TERMINATED),
 
-        (ComponentState.ACTIVE, ComponentState.SUSPENDED),
+        (ComponentState.ACTIVE, ComponentState.SUSP_SEND),
+        (ComponentState.ACTIVE, ComponentState.SUSP_RECV),
         (ComponentState.ACTIVE, ComponentState.TERMINATED),
         (ComponentState.ACTIVE, ComponentState.ERROR),
 
-        (ComponentState.SUSPENDED, ComponentState.ACTIVE),
-        (ComponentState.SUSPENDED, ComponentState.TERMINATED),
-        (ComponentState.SUSPENDED, ComponentState.ERROR)
+        (ComponentState.SUSP_SEND, ComponentState.ACTIVE),
+        (ComponentState.SUSP_SEND, ComponentState.ERROR),
+
+        (ComponentState.SUSP_RECV, ComponentState.ACTIVE),
+        (ComponentState.SUSP_RECV, ComponentState.ERROR)
     ])
 
     def __init__(self, name):
@@ -156,6 +157,11 @@ class Component(RuntimeTarget):
         return self.state in (ComponentState.TERMINATED,
                               ComponentState.ERROR)
 
+    @property
+    def is_suspended(self):
+        return self.state in (ComponentState.SUSP_RECV,
+                              ComponentState.SUSP_SEND)
+
     def terminate(self, ex=None):
         """
         Terminate execution for this component.
@@ -174,28 +180,19 @@ class Component(RuntimeTarget):
         else:
             self.state = ComponentState.TERMINATED
 
-        # Close all input ports
-        for in_port in self.inputs:
-            if in_port.is_open():
-                in_port.close()
-
         self.runtime.terminate_thread(self)
 
     def suspend(self, seconds=None):
         """
         Yield execution to scheduler.
         """
-        if self.is_terminated:
-            self.runtime.suspend_thread(seconds)
-        else:
-            self.state = ComponentState.SUSPENDED
-            self.runtime.suspend_thread(seconds)
-            if not self.is_terminated:
-                self.state = ComponentState.ACTIVE
+        self.runtime.suspend_thread(seconds)
 
     def __str__(self):
-        return ('Component(%s, inputs=%s, outputs=%s)' %
-                (self.name, self.inputs, self.outputs))
+        return '%s(%s)' % (self.__class__.__name__, self.name)
+
+        # return ('Component(%s, inputs=%s, outputs=%s)' %
+        #         (self.name, self.inputs, self.outputs))
 
 
 class InitialPacketGenerator(Component):
@@ -431,9 +428,8 @@ class Graph(Component):
 
                 build_edges(next_components, visited_nodes)
 
-        self.log.debug('Building nx graph...')
         build_nodes(self.components)
         build_edges(self.components)
 
-        self.log.debug('Writing graph to "%s"...' % file_path)
+        self.log.debug('Writing %s to "%s"...' % (self, file_path))
         nx.write_graphml(graph, file_path)
