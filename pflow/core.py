@@ -167,18 +167,18 @@ class Component(RuntimeTarget):
             return
 
         if ex is not None:
-            self.log.error('Abnormally terminating because of %s...' % ex.__class__.__name__)
+            self.log.error('Abnormally terminating because of %s...' %
+                           ex.__class__.__name__)
             self.state = ComponentState.ERROR
         else:
             self.state = ComponentState.TERMINATED
 
         # Close all input ports
-        for inp in self.inputs:
-            inp.clear()
-            if inp.is_open():
-                inp.close()
+        for in_port in self.inputs:
+            if in_port.is_open():
+                in_port.close()
 
-        self.runtime.terminate_thread()
+        self.runtime.terminate_thread(self)
 
     def suspend(self, seconds=None):
         """
@@ -274,7 +274,8 @@ class Graph(Component):
 
         self_starters = set()
         for node in self.components:
-            # Self-starter nodes should have either no inputs or only have disconnected optional inputs
+            # Self-starter nodes should have either no inputs or only
+            # have disconnected optional inputs.
             if len(node.inputs) == 0:
                 # No inputs
                 self_starters.add(node)

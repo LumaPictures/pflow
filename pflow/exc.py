@@ -31,3 +31,7 @@ class PortClosedError(PortError):
     Port is closed.
     """
     pass
+
+
+class GraphRuntimeError(PortError):
+    pass

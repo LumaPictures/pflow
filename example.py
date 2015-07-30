@@ -3,10 +3,10 @@ import os
 use_multi_process = (os.environ.get('PFLOW_MULTIPROCESS', '') == '1')
 
 if use_multi_process:
-    from pflow.runtimes.multi_process import MultiProcessRuntime as RuntimeImpl
+    from pflow.runtimes.multi_process import MultiProcessGraphRuntime as GraphRuntimeImpl
 else:
     # Need to load before logging
-    from pflow.runtimes.single_process import SingleProcessRuntime as RuntimeImpl
+    from pflow.runtimes.single_process import SingleProcessGraphRuntime as GraphRuntimeImpl
 
 import logging
 
@@ -120,13 +120,13 @@ class SuperAwesomeDemoGraph(Graph):
 
 
 def run_graph(graph):
-    log.info('Runtime is: %s' % RuntimeImpl.__name__)
+    log.info('Runtime is: %s' % GraphRuntimeImpl.__name__)
 
     log.info('Running graph: %s' % graph.name)
     graph.write_graphml(os.path.expanduser('~/%s.graphml' % graph.name))
 
-    runtime = RuntimeImpl()
-    runtime.execute_graph(graph)
+    runtime = GraphRuntimeImpl(graph)
+    runtime.execute()
 
 
 def init_logger():
@@ -139,7 +139,7 @@ def init_logger():
     # Console logger
     console = logging.StreamHandler()
     console.setLevel(logging.DEBUG)
-    console.setFormatter(logging.Formatter('%(levelname)-5s | %(name)s: %(message)s'))
+    console.setFormatter(logging.Formatter('%(processName)-20s | %(levelname)-5s | %(name)s: %(message)s'))
     logging.getLogger('').addHandler(console)
 
     # Set verbosity on packages

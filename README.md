@@ -34,9 +34,9 @@ then run the example graphs with `./example.py`.
 ## Graphs
 
 To define and execute a graph, subclass `pflow.core.Graph`, override `initialize()` to construct the graph,
-then run it using a `Runtime` implementation:
+then run it using a `GraphRuntime` implementation:
 
-    from pflow.runtimes.single_process import SingleProcessRuntime
+    from pflow.runtimes.single_process import SingleProcessGraphRuntime
     from pflow.components import *
     from pflow.core import Graph
 
@@ -57,9 +57,8 @@ then run it using a `Runtime` implementation:
 
 
     graph = MyGraph('MY_GRAPH_NAME')
-
-    runtime = SingleProcessRuntime()
-    runtime.execute_graph(graph)
+    runtime = SingleProcessGraphRuntime(graph)
+    runtime.execute()
 
 ## Components
 

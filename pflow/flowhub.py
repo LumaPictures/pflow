@@ -11,6 +11,9 @@ from . import utils
 log = logging.getLogger(__name__)
 
 
+# Use https://github.com/flowbased/fbp-spec or https://github.com/flowbased/fbp-protocol for testing protocol
+
+
 class FlowhubClient(object):
     def __init__(self, endpoint='http://api.flowhub.io'):
         self._endpoint = endpoint

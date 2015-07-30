@@ -1,31 +1,38 @@
+import json
 from abc import ABCMeta, abstractmethod
 
+from ..exc import GraphRuntimeError
 
-class Runtime(object):
+
+class GraphRuntime(object):
     """
-    Schedulers are responsible for starting processes, scheduling execution,
+    Runtimes are responsible for starting processes, scheduling execution,
     and forwarding messages on Connections between Processes.
     """
     __metaclass__ = ABCMeta
 
-    def __init__(self):
+    def __init__(self, graph):
+        from ..core import Graph
         import logging
+
+        if not isinstance(graph, Graph):
+            raise ValueError('graph must be a Graph object')
+
+        self.graph = graph
         self.log = logging.getLogger(self.__class__.__name__)
 
-    def inject_runtime(self, graph):
-        """
-        Wire up runtime dependency to all components in the graph.
-        """
+        # Wire up runtime dependency to all graph components
         for component in graph.components:
             component.runtime = self
 
-    def get_self_starters(self, graph):
+    # This method is no longer necessary since we don't have to write our own scheduler (as we had to with greenlets).
+    def get_self_starters(self):
         """
         Gets all self-starter components in the graph.
         """
-        self_starters = graph.self_starters
+        self_starters = self.graph.self_starters
         if len(self_starters) == 0:
-            self.log.warn('%s is a no-op graph because there are no self-starter components' % graph.name)
+            self.log.warn('%s is a no-op graph because there are no self-starter components' % self.graph.name)
             # raise exc.FlowError('Unable to find any self-starter Components in graph')
         else:
             self.log.debug('Self-starter components are: %s' %
@@ -34,14 +41,28 @@ class Runtime(object):
         return self_starters
 
     def is_upstream_terminated(self, component):
+        """
+        Are all of a component's upstream components terminated?
+
+        :param component: the component to check.
+        :return: whether or not the upstream components have been terminated.
+        """
         dead_parents = all([c.is_terminated for c in component.upstream])
-        inputs_have_data = any([self.port_has_data(p) for p in component.inputs])
-        return dead_parents and not inputs_have_data
+        return dead_parents
 
     def create_component_runner(self, component):
+        """
+        Creates a run loop for a component thread.
+
+        :param component: the component to create the runner for.
+        :return: loop function that gets executed by the thread.
+        """
         from ..core import ComponentState
 
-        def component_loop():
+        def component_loop(in_queues, out_queues):
+            component._in_queues = in_queues
+            component._out_queues = out_queues
+
             while not component.is_terminated:
 
                 # Activate component
@@ -52,6 +73,7 @@ class Runtime(object):
 
                 if self.is_upstream_terminated(component):
                     # Terminate when all upstream components have terminated and there's no more data to process.
+                    # self.log.warn('Terminating component %s because of dead upstream (loop)!' % component.name)
                     component.terminate()
                 else:
                     # Suspend execution until there's more data to process.
@@ -63,33 +85,58 @@ class Runtime(object):
         return component_loop
 
     @abstractmethod
-    def execute_graph(self, graph):
+    def execute(self):
         """
-        Executes a graph by multitasking all component processes and moving messages along queues.
+        Executes the graph.
         """
         pass
 
     @abstractmethod
-    def send(self, packet, dest_port):
-        pass
-
-    @abstractmethod
-    def receive(self, source_port):
-        pass
-
-    @abstractmethod
-    def port_has_data(self, port):
-        pass
-
-    @abstractmethod
-    def clear_port(self, port):
-        pass
-
-    @abstractmethod
-    def terminate_thread(self):
+    def send_port(self, component, port_name, packet):
         """
-        Terminate this thread.
-        It will no longer process packets.
+        Sends a packet on a component's output port.
+
+        :param component: the component the packet is being sent from.
+        :param port_name: the name of the component's output port.
+        :param packet: the packet to send.
+        """
+        pass
+
+    @abstractmethod
+    def receive_port(self, component, port_name):
+        """
+        Receives a packet from a component's input port.
+
+        :param component: the component the packet is being received for.
+        :param port_name: the name of the component's input port.
+        :return: the received packet.
+        """
+        pass
+
+    @abstractmethod
+    def close_input_port(self, component, port_name):
+        """
+        Closes a component's input port.
+
+        :param component: the component who's input port should be closed.
+        :param port_name: the name of the component's input port to close.
+        """
+        pass
+
+    @abstractmethod
+    def close_output_port(self, component, port_name):
+        """
+        Closes a component's output port.
+
+        :param component: the component who's output port should be closed.
+        :param port_name: the name of the component's output port to close.
+        """
+        pass
+
+    @abstractmethod
+    def terminate_thread(self, component):
+        """
+        Terminate this thread, making it no longer process packets.
         """
         pass
 
@@ -121,3 +168,54 @@ class RuntimeTarget(object):
             raise ValueError('Runtime can not be changed. Please re-create the graph.')
 
         self._runtime = runtime
+
+
+class PacketSerializer(object):
+    """
+    Responsible for serializing/deserializing packet data.
+    """
+    __metaclass__ = ABCMeta
+
+    @abstractmethod
+    def serialize(self, packet):
+        pass
+
+    @abstractmethod
+    def deserialize(self, serialized_packet):
+        pass
+
+
+class JsonPacketSerializer(PacketSerializer):
+    """
+    JSON serializer.
+    """
+    def serialize(self, packet):
+        from ..port import Packet
+        if not isinstance(packet, Packet):
+            raise ValueError('packet must be a Packet')
+
+        # TODO: handle dates as iso8601
+        return json.dumps(packet.value)
+
+    def deserialize(self, serialized_packet):
+        from ..port import Packet
+
+        packet_value = json.loads(serialized_packet)
+        return Packet(packet_value)
+
+
+class NoopSerializer(PacketSerializer):
+    """
+    A serializer that basically does nothing.
+    """
+    def serialize(self, packet):
+        from ..port import Packet
+        if not isinstance(packet, Packet):
+            raise ValueError('packet must be a Packet')
+
+        return packet.value
+
+    def deserialize(self, serialized_packet):
+        from ..port import Packet
+
+        return Packet(serialized_packet)

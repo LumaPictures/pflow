@@ -1,11 +1,20 @@
-import sys
-if 'threading' in sys.modules:
-    import gevent.threading
-    import threading
-    if gevent.threading.Lock != threading.Lock:
-        raise RuntimeError('threading module was imported before gevent could monkey patch it!')
-else:
+def _monkey_patch():
+    # import sys
+    # if 'threading' in sys.modules:
+    #     import gevent.threading
+    #     import threading
+    #
+    #     if gevent.threading.Lock != threading.Lock:
+    #         # Crap!
+    #         sys.stderr.write('WARNING: The "threading" module was imported before "%s"; gevent could not monkey '
+    #                          'patch it first, and this may cause graph execution to halt where threads are used!\n' %
+    #                          __name__)
+    #
+    # else:
+
+    # Do the monkey patch
     import gevent.monkey
+
     gevent.monkey.patch_all(socket=True,  # socket
                             dns=True,  # socket dns functions
                             time=True,  # time.sleep
@@ -19,6 +28,9 @@ else:
                             sys=False,  # stdin, stdout, stderr
                             Event=False)
 
+
+_monkey_patch()
+
 import collections
 
 try:
@@ -28,27 +40,31 @@ except ImportError:
 
 import gevent
 
-from .base import Runtime
+from .base import GraphRuntime
 from ..core import ComponentState
+from ..exc import GraphRuntimeError
 
 
-class SingleProcessRuntime(Runtime):
+class SingleProcessGraphRuntime(GraphRuntime):
     """
     Executes a graph in a single process, where each component is run in its own gevent coroutine.
 
     This low-overhead runtime is useful in environments that are hostile to multiprocessing/threading,
     or when components are mostly I/O bound (i.e. don't need process parallelization).
     """
-    def __init__(self):
-        super(SingleProcessRuntime, self).__init__()
+    def __init__(self, graph):
+        super(SingleProcessGraphRuntime, self).__init__(graph)
+        self._recv_queues = None
+
+    def execute(self):
+        self.log.debug('Executing graph %s' % self.graph)
+
         self._recv_queues = collections.defaultdict(queue.Queue)
-
-    def execute_graph(self, graph):
-        self.log.debug('Executing graph %s' % graph)
-        self.inject_runtime(graph)
-
-        coroutines = dict([(gevent.spawn(self.create_component_runner(c)), c)
-                           for c in graph.components])
+        coroutines = dict([(gevent.spawn(self.create_component_runner(component),
+                                         None,   # in_queues
+                                         None),  # out_queues
+                            component)
+                           for component in self.graph.components])
 
         def thread_error_handler(coroutine):
             """
@@ -71,37 +87,42 @@ class SingleProcessRuntime(Runtime):
 
         self.log.debug('Finished graph execution')
 
-    def send(self, packet, dest_port):
-        q = self._recv_queues[dest_port]
-        self.log.debug('Sending packet to %s' % dest_port)
+    def send_port(self, component, port_name, packet):
+        dest_port_id = component.outputs[port_name].target_port.id
+        q = self._recv_queues[dest_port_id]
+        self.log.debug('Sending packet to %s' % dest_port_id)
         q.put(packet)
 
-    def receive(self, source_port):
-        q = self._recv_queues[source_port]
-        component = source_port.component
+    def receive_port(self, component, port_name):
+        source_port_id = component.inputs[port_name].id
+        q = self._recv_queues[source_port_id]
         while True:
             try:
                 packet = q.get(block=False)
-                self.log.debug('%s received packet on %s' % (component, source_port))
+                self.log.debug('%s received packet on %s' % (component, source_port_id))
                 component.state = ComponentState.ACTIVE
                 return packet
             except queue.Empty:
                 if self.is_upstream_terminated(component):
                     # No more data left to receive_packet and upstream has terminated.
+                    # self.log.warn('Terminating component %s because of dead upstream (recv: %s)!' %
+                    #               (component.name, source_port_id))
                     component.terminate()
                 else:
-                    self.log.debug('%s is waiting for packet on %s' % (component, source_port))
+                    self.log.debug('%s is waiting for packet on %s' % (component, source_port_id))
                     component.suspend()
 
-    def port_has_data(self, port):
-        return (port in self._recv_queues and
-                not self._recv_queues[port].empty())
+    def close_input_port(self, component, port_name):
+        port_id = component.inputs[port_name].id
+        if port_id in self._recv_queues:
+            del self._recv_queues[port_id]
 
-    def clear_port(self, port):
-        if port in self._recv_queues:
-            del self._recv_queues[port]
+    def close_output_port(self, component, port_name):
+        port_id = component.outputs[port_name].id
+        if port_id in self._recv_queues:
+            del self._recv_queues[port_id]
 
-    def terminate_thread(self):
+    def terminate_thread(self, component):
         raise gevent.GreenletExit
 
     def suspend_thread(self, seconds=None):

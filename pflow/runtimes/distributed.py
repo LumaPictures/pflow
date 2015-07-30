@@ -1,9 +1,10 @@
-from .base import Runtime
+from .base import GraphRuntime
 from ..core import ComponentState
+from ..exc import GraphRuntimeError
 
 
 # TODO: implement this
-class DistributedRuntime(Runtime):
+class DistributedGraphRuntime(GraphRuntime):
     """
     Executes a graph in parallel using multiple processes that may reside on multiple
     machines over a network, where each component is run in its own process.
@@ -11,22 +12,25 @@ class DistributedRuntime(Runtime):
     This runtime is more scalable than the MultiProcessRuntime, but it comes with more
     overhead in terms of execution and administration.
     """
-    def execute_graph(self, graph):
+    def __init__(self, graph):
+        super(DistributedGraphRuntime, self).__init__(graph)
+
+    def execute(self):
         raise NotImplementedError
 
-    def send(self, packet, dest_port):
+    def send_port(self, component, port_name, packet):
         raise NotImplementedError
 
-    def receive(self, source_port):
+    def receive_port(self, component, port_name):
         raise NotImplementedError
 
-    def port_has_data(self, port):
+    def close_input_port(self, component, port_name):
         raise NotImplementedError
 
-    def clear_port(self, port):
+    def close_output_port(self, component, port_name):
         raise NotImplementedError
 
-    def terminate_thread(self):
+    def terminate_thread(self, component):
         raise NotImplementedError
 
     def suspend_thread(self, seconds=None):

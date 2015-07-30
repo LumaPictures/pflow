@@ -104,7 +104,7 @@ class Port(BasePort):
         pass
 
     @property
-    def full_name(self):
+    def id(self):
         if self.component is not None:
             component_name = self.component.name
         else:
@@ -126,7 +126,7 @@ class Port(BasePort):
 
     def __str__(self):
         return '%s(%s%s)' % (self.__class__.__name__,
-                             self.full_name,
+                             self.id,
                              '*' if self.optional else '')
 
 
@@ -155,7 +155,7 @@ class InputPort(Port):
             self._check_ready_state()
 
         runtime = self.component.runtime
-        packet = runtime.receive(self)
+        packet = runtime.receive_port(self.component, self.name)
 
         # TODO: claim ownership
         # TODO: increment refcount
@@ -169,8 +169,11 @@ class InputPort(Port):
             self.component.drop(packet)
             return value
 
-    def clear(self):
-        self.component.runtime.clear_port(self)
+    def close(self):
+        if self.is_open():
+            self.component.runtime.close_input_port(self.component, self.name)
+
+        super(InputPort, self).close()
 
 
 class ArrayPort(BasePort):
@@ -185,9 +188,9 @@ class ArrayPort(BasePort):
         self._kwargs = kwargs
 
         self._ports = []
-        self.allocate()
+        self._allocate()
 
-    def allocate(self):
+    def _allocate(self):
         """
         Allocate array port.
         """
@@ -239,7 +242,7 @@ class OutputPort(Port):
             self._check_ready_state()
 
         runtime = self.component.runtime
-        runtime.send(packet, self.target_port)
+        runtime.send_port(self.component, self.name, packet)
 
         # TODO: decrement refcount
 
@@ -266,6 +269,9 @@ class OutputPort(Port):
     def close(self):
         if self._bracket_depth != 0:
             raise ValueError('There are %d open brackets on %s' % self)
+
+        if self.component.target_port.is_open():
+            self.component.runtime.close_output_port(self.component.target_port.component, self.name)
 
         super(OutputPort, self).close()
 
