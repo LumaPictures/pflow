@@ -98,5 +98,4 @@ class MultiProcessGraphRuntime(GraphRuntime):
             component.state = ComponentState.TERMINATED
 
     def suspend_thread(self, seconds=None):
-        # TODO: Sleep until queue has data
-        time.sleep(1)
+        time.sleep(seconds or 0)
