@@ -66,14 +66,12 @@ class BasePort(object):
 class Port(BasePort):
     __metaclass__ = ABCMeta
 
-    # TODO: change type_ to types (to allow for varying data types when bracketing)
     def __init__(self, name, description=None, optional=False, allowed_types=None):
         """
         :param name: the unique (per-component) name of this port.
         :param description: an optional description of what this port is used for.
         :param optional: is this port optional (i.e. can it be connected to nothing)?
-        :param allowed_types: list/set of allowed Packet data types that can be passed through this port,
-                              or None to allow any.
+        :param allowed_types: list/set of allowed that can be passed through this port (or empty/None to allow any).
         """
         if not isinstance(name, basestring):
             raise ValueError('name must be a string')
@@ -95,12 +93,22 @@ class Port(BasePort):
                     not isinstance(allowed_types, basestring)):
                 raise ValueError('allowed_types must be a non-string sequence')
 
+            for type_ in allowed_types:
+                if not isinstance(type_, type):
+                    raise ValueError('allowed_types: %s is not a type')
+
             self.allowed_types = set(allowed_types)  # Data types
         else:
-            self.allowed_types = None
+            self.allowed_types = set()
 
         self.component = None  # Owning component
         self._is_open = True
+
+    def supports_type(self, type_):
+        if not isinstance(type_, type):
+            raise ValueError('type_ must be a type')
+
+        return type_ in self.allowed_types
 
     def open(self):
         if not self.is_connected():
