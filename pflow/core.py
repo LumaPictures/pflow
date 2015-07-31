@@ -47,7 +47,10 @@ class Component(RuntimeTarget):
     """
     __metaclass__ = ABCMeta
 
-    # Valid state transitions for components
+    # Valid state transitions for components.
+    #
+    # See ../docs/states.graphml for how this is visually represented.
+    # Please keep this list of edges in sync with the graphml and README.md docs!
     _valid_transitions = frozenset([
         (ComponentState.NOT_STARTED, ComponentState.ACTIVE),
         (ComponentState.NOT_STARTED, ComponentState.TERMINATED),

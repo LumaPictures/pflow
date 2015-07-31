@@ -91,7 +91,7 @@ and `run()` methods:
 
 ### Component Design
 
-Here's some general rules of thumb for creating components:
+Rules for creating components:
 
 * The `Component.initialize()` method is used for setting up ports and any initial state.
 * The `Component.run()` method is called by the runtime every time there's a new packet arrives on the `InputPort`
@@ -101,8 +101,8 @@ Here's some general rules of thumb for creating components:
   will terminate execution.
 * Call `Component.suspend()` if you need to be explicit about suspending execution (typically done in loops or when 
   waiting for some asynchronous task to complete).
-* Calls to `InputPort.receive()` or `InputPort.receive_packet()` implicitly call `Component.suspend()` while waiting
-  for data to arrive. Calls to `OutputPort.send()` or `OutputPort.send_packet()` do not have this behavior, however.
+* Calls to `Port.send*()` or `Port.receive*()` implicitly call `Component.suspend()` in the `SingleProcessGraphRuntime`
+  while waiting for data to arrive, so that they do not block greenlet execution.
 * Call `Component.terminate()` if you need to be explicit about terminating a component.
 * Unless you are explicitly calling `Component.suspend()` to wait on an async result, and are making a call to a 
   blocking operation (that gevent patches), you should add a `self.state = ComponentState.SUSPENDED` before the call.
@@ -119,3 +119,7 @@ Here's some general rules of thumb for creating components:
 | **SUSP_RECV** | Component is waiting to receive data on its input port. |
 | **TERMINATED** | Component has successfully terminated execution (final state). |
 | **ERROR** | Component has terminated execution because of an error (final state). |
+
+### Class Diagram
+
+![Class diagram](./docs/class-diagram.png)

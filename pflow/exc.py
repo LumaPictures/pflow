@@ -5,6 +5,10 @@ class FlowError(Exception):
     pass
 
 
+class GraphRuntimeError(FlowError):
+    pass
+
+
 class ComponentError(Exception):
     """
     Component-level error.
@@ -19,7 +23,7 @@ class ComponentStateError(ComponentError):
     pass
 
 
-class PortError(FlowError):
+class PortError(ComponentError):
     """
     Port error.
     """
@@ -30,8 +34,4 @@ class PortClosedError(PortError):
     """
     Port is closed.
     """
-    pass
-
-
-class GraphRuntimeError(PortError):
     pass
