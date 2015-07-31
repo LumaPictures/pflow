@@ -13,6 +13,7 @@ install_requires = [
     'gevent',
     #'haigha',  # amqp
     'pyparsing',  # fbp grammar
+    'gevent-websocket',  # fbp network runtime
 
     # Component-specific stuff
     'requests',
