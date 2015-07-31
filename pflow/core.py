@@ -215,7 +215,7 @@ class InitialPacketGenerator(Component):
                                                      utils.random_id())
 
     def initialize(self):
-        self.outputs.add(OutputPort('OUT'))
+        self.outputs.add('OUT')
 
     def run(self):
         self.outputs['OUT'].send(self.value)
@@ -288,6 +288,15 @@ class Graph(Component):
         self.connect(iip.outputs['OUT'], port)
         return iip
 
+    def set_port_defaults(self, component):
+        """
+        Create a default initial packet for all of the component's optional
+        unconnected ports.
+        """
+        for port in component.inputs:
+            if port.optional and not port.is_connected() and port.default is not None:
+                self.set_initial_packet(port, port.default)
+
     def connect(self, source_output_port, target_input_port):
         """
         Connect components by their ports.
@@ -347,6 +356,7 @@ class Graph(Component):
         return all([component.is_terminated for component in self.components])
 
     # TODO: move all serializers to their own module / abstract class
+
     def load_fbp_string(self, fbp_script):
         if not isinstance(fbp_script, basestring):
             raise ValueError('fbp_script must be a string')

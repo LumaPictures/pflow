@@ -10,8 +10,8 @@ class Repeat(Component):
     Repeats inputs from IN to OUT
     """
     def initialize(self):
-        self.inputs.add(InputPort('IN'))
-        self.outputs.add(OutputPort('OUT'))
+        self.inputs.addPorts(InputPort('IN'))
+        self.outputs.addPorts(OutputPort('OUT'))
 
     def run(self):
         packet = self.inputs['IN'].receive_packet()
@@ -25,7 +25,7 @@ class Drop(Component):
     This component is a sink that acts like /dev/null
     """
     def initialize(self):
-        self.inputs.add(InputPort('IN'))
+        self.inputs.addPorts(InputPort('IN'))
 
     def run(self):
         packet = self.inputs['IN'].receive_packet()
@@ -38,11 +38,11 @@ class Sleep(Component):
     repeating inputs from IN to OUT.
     """
     def initialize(self):
-        self.inputs.add(InputPort('IN'),
+        self.inputs.addPorts(InputPort('IN'),
                         InputPort('DELAY',
                                   allowed_types=[int],
                                   description='Number of seconds to delay'))
-        self.outputs.add(OutputPort('OUT'))
+        self.outputs.addPorts(OutputPort('OUT'))
 
     def run(self):
         delay_value = self.inputs['DELAY'].receive()
@@ -67,8 +67,8 @@ class Split(Component):
     Splits inputs from IN to OUT[]
     """
     def initialize(self):
-        self.inputs.add(InputPort('IN'))
-        self.outputs.add(ArrayOutputPort('OUT', 10))
+        self.inputs.addPorts(InputPort('IN'))
+        self.outputs.addPorts(ArrayOutputPort('OUT', 10))
 
     def run(self):
         packet = self.inputs['IN'].receive_packet()
@@ -82,13 +82,13 @@ class RegexFilter(Component):
     and dropping non-matches.
     """
     def initialize(self):
-        self.inputs.add(InputPort('IN',
+        self.inputs.addPorts(InputPort('IN',
                                   allowed_types=[str],
                                   description='String to filter'),
                         InputPort('REGEX',
                                   allowed_types=[str],
                                   description='Regex to use for filtering'))
-        self.outputs.add(OutputPort('OUT',
+        self.outputs.addPorts(OutputPort('OUT',
                                     allowed_types=[str],
                                     description='String that matched filter'))
 
@@ -116,8 +116,8 @@ class Concat(Component):
     Concatenates inputs from IN[] into OUT
     """
     def initialize(self):
-        self.inputs.add(ArrayInputPort('IN', 10))
-        self.outputs.add(OutputPort('OUT'))
+        self.inputs.addPorts(ArrayInputPort('IN', 10))
+        self.outputs.addPorts(OutputPort('OUT'))
 
     def run(self):
         for inp in self.inputs['IN']:
@@ -127,9 +127,9 @@ class Concat(Component):
 
 class Multiply(Component):
     def initialize(self):
-        self.inputs.add(InputPort('X'),
+        self.inputs.addPorts(InputPort('X'),
                         InputPort('Y'))
-        self.outputs.add(OutputPort('OUT'))
+        self.outputs.addPorts(OutputPort('OUT'))
 
     def run(self):
         x = self.inputs['X'].receive()
@@ -148,10 +148,10 @@ class FileTailReader(Component):
     emitting new lines that are added to output port OUT.
     """
     def initialize(self):
-        self.inputs.add(InputPort('PATH',
+        self.inputs.addPorts(InputPort('PATH',
                                   description='File to tail',
                                   allowed_types=[str]))
-        self.outputs.add(OutputPort('OUT',
+        self.outputs.addPorts(OutputPort('OUT',
                                     description='Lines that are added to file'))
 
     def run(self):
@@ -174,7 +174,7 @@ class ConsoleLineWriter(Component):
     This component is a sink.
     """
     def initialize(self):
-        self.inputs.add(InputPort('IN'))
+        self.inputs.addPorts(InputPort('IN'))
 
     def run(self):
         message = self.inputs['IN'].receive()
@@ -188,8 +188,8 @@ class LogTap(Graph):
     to the console log, and forwarding them to OUT.
     """
     def initialize(self):
-        self.inputs.add(InputPort('IN'))
-        self.outputs.add(OutputPort('OUT'))
+        self.inputs.addPorts(InputPort('IN'))
+        self.outputs.addPorts(OutputPort('OUT'))
 
         tap = Split('TAP')
         log = ConsoleLineWriter('LOG')
@@ -207,7 +207,7 @@ class RandomNumberGenerator(Component):
     This component is a generator.
     """
     def initialize(self):
-        self.inputs.add(InputPort('SEED',
+        self.inputs.addPorts(InputPort('SEED',
                                   allowed_types=[int],
                                   optional=True,
                                   description='Seed value for PRNG'),
@@ -215,7 +215,7 @@ class RandomNumberGenerator(Component):
                                   allowed_types=[int],
                                   optional=True,
                                   description='Number of times to iterate (default: infinite)'))
-        self.outputs.add(OutputPort('OUT'))
+        self.outputs.addPorts(OutputPort('OUT'))
 
     def run(self):
         import random
