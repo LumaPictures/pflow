@@ -15,35 +15,27 @@ from pflow.components import *
 log = logging.getLogger(__name__)
 
 
-class HypeMachinePopularTracksReader(Component):
+class Simple(Component):
     def initialize(self):
-        self.inputs.add(InputPort('API_KEY', allowed_types=[str]),
-                        InputPort('COUNT',
-                                  optional=True,
-                                  allowed_types=[int]))
-        self.outputs.add(OutputPort('OUT'))
+        self.inputs.add('in')
 
     def run(self):
-        import requests
+        while not self.is_terminated:
+            print "connected", self.inputs['in'].is_connected()
+            print "open", self.inputs['in'].is_open()
+            print "value", self.inputs['in'].receive()
+            print "-"
 
-        api_key = self.inputs['API_KEY'].receive()
 
-        count = self.inputs['COUNT'].receive()
-        if count is None:
-            count = 10
-
-        response = requests.get('https://api.hypem.com/v2/tracks?sort=popular&key=%s&count=%d' %
-                                (api_key, count))
-        tracks = response.json()
-
-        for track in tracks:
-            self.outputs['OUT'].send(track)
+class SimpleGraph(Graph):
+    def initialize(self):
+        self.set_initial_packet(Simple('Simple1').inputs['in'], 'foo')
 
 
 class HypeMachineTrackStringifier(Component):
     def initialize(self):
-        self.inputs.add(InputPort('IN'))
-        self.outputs.add(OutputPort('OUT'))
+        self.inputs.addPorts(InputPort('IN'))
+        self.outputs.addPorts(OutputPort('OUT'))
 
     def run(self):
         track = self.inputs['IN'].receive()
@@ -137,7 +129,7 @@ def init_logger():
 
     # Console logger
     console = logging.StreamHandler()
-    console.setLevel(logging.INFO)
+    console.setLevel(logging.DEBUG)
     console.setFormatter(logging.Formatter('%(processName)-20s | %(levelname)-5s | %(name)s: %(message)s'))
     logging.getLogger('').addHandler(console)
 
@@ -152,8 +144,9 @@ def main():
     #fbp_graph.load_fbp_file('./example/awesome.fbp')
 
     test_graphs = [
-        SuperAwesomeDemoGraph('AWESOME_1'),
-        PopularMusicGraph('MUSIC_1'),
+        SimpleGraph('SIMPLE'),
+        # SuperAwesomeDemoGraph('AWESOME_1'),
+        # PopularMusicGraph('MUSIC_1'),
         #fbp_graph,
         #ProcessSpawningLogger('PROCSPAWN_1')
     ]

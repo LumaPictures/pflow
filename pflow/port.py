@@ -77,7 +77,8 @@ class BasePort(object):
 class Port(BasePort):
     __metaclass__ = ABCMeta
 
-    def __init__(self, name, description=None, optional=False, allowed_types=None):
+    def __init__(self, name, description=None, optional=True,
+                 allowed_types=None, default=None):
         """
         :param name: the unique (per-component) name of this port.
         :param description: an optional description of what this port is used for.
@@ -112,6 +113,7 @@ class Port(BasePort):
         else:
             self.allowed_types = set()
 
+        self.default = default
         self.component = None  # Owning component
         self._is_open = True
 
@@ -218,6 +220,8 @@ class InputPort(Port):
         super(InputPort, self).close()
 
 
+# FIXME: make this a mixin and have ArrayInputPort inherit from InputPort?
+# would give cleaner validation: isinstance(InputPort).
 class ArrayPort(BasePort):
     __metaclass__ = ABCMeta
 
@@ -329,16 +333,17 @@ class PortRegistry(object):
     """
     Per-component port registry descriptor.
     """
-    def __init__(self, component, *required_superclasses):
-        self._ports = {}
+    def __init__(self, component, port_type, array_port_type):
+        self._ports = collections.OrderedDict()
         self._component = component
-
-        if not all(map(lambda c: issubclass(c, BasePort), required_superclasses)):
+        self._port_type = port_type
+        self._array_port_type = array_port_type
+        self._required_superclasses = (port_type, array_port_type)
+        if not all(issubclass(c, BasePort) for c
+                   in self._required_superclasses):
             raise ValueError('required_superclass must be Port subclass')
 
-        self._required_superclasses = required_superclasses
-
-    def add(self, *ports):
+    def addPorts(self, *ports):
         """
         Add a new port to the registry.
         """
@@ -355,10 +360,17 @@ class PortRegistry(object):
                                  (port, port.component))
 
             port.component = self._component
-            # FIXME: this needs to be ordered
             self._ports[port.name] = port
 
         return self
+
+    def add(self, name, **kwargs):
+        """
+        Add a new port to the registry.
+        """
+        port = self._port_type(name, **kwargs)
+        self.addPorts(port)
+        return port
 
     def __getitem__(self, port_name):
         """
