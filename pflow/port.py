@@ -17,6 +17,9 @@ class Packet(object):
     Information packet (IP)
     """
     def __init__(self, value):
+        """
+        :param value:
+        """
         self.value = value
         self._owner = None  # Component that owns this
         self.attrs = {}  # Named attributes
@@ -27,7 +30,10 @@ class Packet(object):
 
     @owner.setter
     def owner(self, value):
-        # TODO: unset old owner by decrementing self._owner.owned_packet_count
+        if self._owner is not None:
+            raise ValueError("You can not change a packet's owner. "
+                             "Create a copy and drop this packet instead.")
+
         self._owner = value
 
     def __str__(self):
@@ -40,23 +46,28 @@ class BracketPacket(Packet):
     """
     __metaclass__ = ABCMeta
 
+    def __init__(self, key=None):
+        """
+        :param key: an optional key used for random access bracketing (e.g. building dicts or arrays
+                    without the need for strict stack behavior). Represents the begin/end of data
+                    for a given key.
+        """
+        super(BracketPacket, self).__init__(None)
+        self.key = key
+
 
 class StartBracket(BracketPacket):
     """
     Start of bracketed data.
     """
-    def __init__(self):
-        # HACK
-        super(StartBracket, self).__init__('__BRACKET_MAGIC_VALUE:START__')
+    pass
 
 
 class EndBracket(BracketPacket):
     """
     End of bracketed data.
     """
-    def __init__(self):
-        # HACK
-        super(EndBracket, self).__init__('__BRACKET_MAGIC_VALUE:END__')
+    pass
 
 
 class BasePort(object):

@@ -3,9 +3,9 @@ import logging
 import json
 
 try:
-    from queue import Queue  # 3.x
+    import queue  # 3.x
 except ImportError:
-    from Queue import Queue  # 2.x
+    import Queue as queue  # 2.x
 
 from enum import Enum
 
@@ -71,11 +71,14 @@ class Component(RuntimeTarget):
         self.name = name
         self.inputs = PortRegistry(self, InputPort, ArrayInputPort)
         self.outputs = PortRegistry(self, OutputPort, ArrayOutputPort)
-        self._state = ComponentState.NOT_STARTED
-        self.owned_packet_count = 0
         self.log = logging.getLogger('%s(%s)' % (self.__class__.__name__,
                                                  self.name))
+
         self.initialize()
+
+        self.stack = queue.LifoQueue()  # Used for simple bracket packets
+        self.owned_packet_count = 0
+        self._state = ComponentState.NOT_STARTED
 
     @property
     def state(self):

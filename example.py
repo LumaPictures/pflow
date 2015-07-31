@@ -32,7 +32,7 @@ class HypeMachinePopularTracksReader(Component):
         if count is None:
             count = 10
 
-        response = requests.get('https://api.hypem.com/v2/tracks?sort=latest&key=%s&count=%d' %
+        response = requests.get('https://api.hypem.com/v2/tracks?sort=popular&key=%s&count=%d' %
                                 (api_key, count))
         tracks = response.json()
 
