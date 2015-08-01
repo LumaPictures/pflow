@@ -4,18 +4,21 @@ from .core import Graph, Component, ComponentState, \
     InputPort, OutputPort, \
     ArrayInputPort, ArrayOutputPort
 
+from .port import EndOfStream
+
 
 class Repeat(Component):
     """
     Repeats inputs from IN to OUT
     """
     def initialize(self):
-        self.inputs.addPorts(InputPort('IN'))
-        self.outputs.addPorts(OutputPort('OUT'))
+        self.inputs.add_ports(InputPort('IN'))
+        self.outputs.add_ports(OutputPort('OUT'))
 
     def run(self):
         packet = self.inputs['IN'].receive_packet()
-        self.outputs['OUT'].send_packet(packet)
+        if packet is not EndOfStream:
+            self.outputs['OUT'].send_packet(packet)
 
 
 class Drop(Component):
@@ -25,11 +28,12 @@ class Drop(Component):
     This component is a sink that acts like /dev/null
     """
     def initialize(self):
-        self.inputs.addPorts(InputPort('IN'))
+        self.inputs.add_ports(InputPort('IN'))
 
     def run(self):
         packet = self.inputs['IN'].receive_packet()
-        self.drop(packet)
+        if packet is not EndOfStream:
+            self.drop(packet)
 
 
 class Sleep(Component):
@@ -38,15 +42,15 @@ class Sleep(Component):
     repeating inputs from IN to OUT.
     """
     def initialize(self):
-        self.inputs.addPorts(InputPort('IN'),
-                        InputPort('DELAY',
-                                  allowed_types=[int],
-                                  description='Number of seconds to delay'))
-        self.outputs.addPorts(OutputPort('OUT'))
+        self.inputs.add_ports(InputPort('IN'),
+                              InputPort('DELAY',
+                                        allowed_types=[int],
+                                        description='Number of seconds to delay'))
+        self.outputs.add_ports(OutputPort('OUT'))
 
     def run(self):
         delay_value = self.inputs['DELAY'].receive()
-        if delay_value is None:
+        if delay_value is EndOfStream:
             delay_value = 0
 
         if delay_value == 0:
@@ -55,6 +59,8 @@ class Sleep(Component):
 
         while not self.is_terminated:
             packet = self.inputs['IN'].receive_packet()
+            if packet is EndOfStream:
+                break
 
             self.log.debug('Sleeping for %d seconds...' % delay_value)
             self.suspend(delay_value)
@@ -67,13 +73,14 @@ class Split(Component):
     Splits inputs from IN to OUT[]
     """
     def initialize(self):
-        self.inputs.addPorts(InputPort('IN'))
-        self.outputs.addPorts(ArrayOutputPort('OUT', 10))
+        self.inputs.add_ports(InputPort('IN'))
+        self.outputs.add_ports(ArrayOutputPort('OUT', 10))
 
     def run(self):
         packet = self.inputs['IN'].receive_packet()
-        for outp in self.outputs['OUT']:
-            outp.send_packet(packet)
+        if packet is not EndOfStream:
+            for outp in self.outputs['OUT']:
+                outp.send_packet(packet)
 
 
 class RegexFilter(Component):
@@ -82,15 +89,15 @@ class RegexFilter(Component):
     and dropping non-matches.
     """
     def initialize(self):
-        self.inputs.addPorts(InputPort('IN',
-                                  allowed_types=[str],
-                                  description='String to filter'),
-                        InputPort('REGEX',
-                                  allowed_types=[str],
-                                  description='Regex to use for filtering'))
-        self.outputs.addPorts(OutputPort('OUT',
-                                    allowed_types=[str],
-                                    description='String that matched filter'))
+        self.inputs.add_ports(InputPort('IN',
+                                        allowed_types=[str],
+                                        description='String to filter'),
+                              InputPort('REGEX',
+                                        allowed_types=[str],
+                                        description='Regex to use for filtering'))
+        self.outputs.add_ports(OutputPort('OUT',
+                                          allowed_types=[str],
+                                          description='String that matched filter'))
 
     def run(self):
         import re
@@ -102,6 +109,8 @@ class RegexFilter(Component):
 
         while not self.is_terminated:
             packet = self.inputs['IN'].receive_packet()
+            if packet is EndOfStream:
+                break
 
             if pattern.search(packet.value) is not None:
                 self.log.debug('Matched: "%s"' % packet.value)
@@ -116,24 +125,33 @@ class Concat(Component):
     Concatenates inputs from IN[] into OUT
     """
     def initialize(self):
-        self.inputs.addPorts(ArrayInputPort('IN', 10))
-        self.outputs.addPorts(OutputPort('OUT'))
+        self.inputs.add_ports(ArrayInputPort('IN', 10))
+        self.outputs.add_ports(OutputPort('OUT'))
 
     def run(self):
         for inp in self.inputs['IN']:
-            packet = inp.read()
+            packet = inp.receive()
+            if packet is EndOfStream:
+                break
+
             self.outputs['OUT'].send_packet(packet)
 
 
 class Multiply(Component):
     def initialize(self):
-        self.inputs.addPorts(InputPort('X'),
-                        InputPort('Y'))
-        self.outputs.addPorts(OutputPort('OUT'))
+        self.inputs.add_ports(InputPort('X'),
+                              InputPort('Y'))
+        self.outputs.add_ports(OutputPort('OUT'))
 
     def run(self):
         x = self.inputs['X'].receive()
+        if x is EndOfStream:
+            return
+
         y = self.inputs['Y'].receive()
+        if y is EndOfStream:
+            return
+
         result = int(x) * int(y)
 
         self.log.debug('Multiply %s * %s = %d' %
@@ -148,16 +166,19 @@ class FileTailReader(Component):
     emitting new lines that are added to output port OUT.
     """
     def initialize(self):
-        self.inputs.addPorts(InputPort('PATH',
-                                  description='File to tail',
-                                  allowed_types=[str]))
-        self.outputs.addPorts(OutputPort('OUT',
-                                    description='Lines that are added to file'))
+        self.inputs.add_ports(InputPort('PATH',
+                                        description='File to tail',
+                                        allowed_types=[str]))
+        self.outputs.add_ports(OutputPort('OUT',
+                                          description='Lines that are added to file'))
 
     def run(self):
         import sh
 
         file_path = self.inputs['PATH'].receive()
+        if file_path is EndOfStream:
+            return
+
         self.log.debug('Tailing file: %s' % file_path)
 
         for line in sh.tail('-f', file_path, _iter=True):
@@ -174,12 +195,12 @@ class ConsoleLineWriter(Component):
     This component is a sink.
     """
     def initialize(self):
-        self.inputs.addPorts(InputPort('IN'))
+        self.inputs.add_ports(InputPort('IN'))
 
     def run(self):
         message = self.inputs['IN'].receive()
-        #raise ValueError('foo')
-        print message
+        if message is not EndOfStream:
+            print message
 
 
 class LogTap(Graph):
@@ -188,8 +209,8 @@ class LogTap(Graph):
     to the console log, and forwarding them to OUT.
     """
     def initialize(self):
-        self.inputs.addPorts(InputPort('IN'))
-        self.outputs.addPorts(OutputPort('OUT'))
+        self.inputs.add_ports(InputPort('IN'))
+        self.outputs.add_ports(OutputPort('OUT'))
 
         tap = Split('TAP')
         log = ConsoleLineWriter('LOG')
@@ -207,15 +228,15 @@ class RandomNumberGenerator(Component):
     This component is a generator.
     """
     def initialize(self):
-        self.inputs.addPorts(InputPort('SEED',
-                                  allowed_types=[int],
-                                  optional=True,
-                                  description='Seed value for PRNG'),
-                        InputPort('LIMIT',
-                                  allowed_types=[int],
-                                  optional=True,
-                                  description='Number of times to iterate (default: infinite)'))
-        self.outputs.addPorts(OutputPort('OUT'))
+        self.inputs.add_ports(InputPort('SEED',
+                                        allowed_types=[int],
+                                        optional=True,
+                                        description='Seed value for PRNG'),
+                              InputPort('LIMIT',
+                                        allowed_types=[int],
+                                        optional=True,
+                                        description='Number of times to iterate (default: infinite)'))
+        self.outputs.add_ports(OutputPort('OUT'))
 
     def run(self):
         import random
@@ -223,7 +244,7 @@ class RandomNumberGenerator(Component):
 
         # Seed the PRNG
         seed_value = self.inputs['SEED'].receive()
-        if seed_value is not None:
+        if seed_value is not EndOfStream:
             prng.seed(seed_value)
 
         limit_value = self.inputs['LIMIT'].receive()
@@ -236,7 +257,7 @@ class RandomNumberGenerator(Component):
             packet = self.create_packet(random_value)
             self.outputs['OUT'].send_packet(packet)
 
-            if limit_value is not None:
+            if limit_value is not EndOfStream:
                 i += 1
                 if i >= limit_value:
                     self.terminate()

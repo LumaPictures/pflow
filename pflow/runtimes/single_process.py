@@ -37,7 +37,8 @@ import gevent
 
 from .base import GraphRuntime
 from ..core import ComponentState
-from ..exc import GraphRuntimeError
+from ..port import EndOfStream
+from .. import exc
 
 
 class SingleProcessGraphRuntime(GraphRuntime):
@@ -94,9 +95,12 @@ class SingleProcessGraphRuntime(GraphRuntime):
 
     def receive_port(self, component, port_name):
         source_port = component.inputs[port_name]
+        if not source_port.is_open():
+            return
+
         q = self._recv_queues[source_port.id]
         component.state = ComponentState.SUSP_RECV
-        while True:
+        while not component.is_terminated:
             try:
                 packet = q.get(block=False)
                 self.log.debug('%s received packet on %s: %s' % (component, source_port, packet))
@@ -105,10 +109,11 @@ class SingleProcessGraphRuntime(GraphRuntime):
             except queue.Empty:
                 if self.graph.is_upstream_terminated(component):
                     # No more data left to receive_packet and upstream has terminated.
-                    self.log.debug('%s will be terminated because of dead upstream (receive_port: %s)' %
-                                   (component, source_port))
-                    component.state = ComponentState.ACTIVE
-                    component.terminate()
+                    component.state = ComponentState.TERMINATED
+                    if source_port.is_open():
+                        source_port.close()
+
+                    return EndOfStream
                 else:
                     #self.log.debug('%s is waiting for packet on %s' % (component, source_port_id))
                     component.suspend()

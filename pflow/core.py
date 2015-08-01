@@ -64,7 +64,8 @@ class Component(RuntimeTarget):
         (ComponentState.SUSP_SEND, ComponentState.ERROR),
 
         (ComponentState.SUSP_RECV, ComponentState.ACTIVE),
-        (ComponentState.SUSP_RECV, ComponentState.ERROR)
+        (ComponentState.SUSP_RECV, ComponentState.ERROR),
+        (ComponentState.SUSP_RECV, ComponentState.TERMINATED)
     ])
 
     def __init__(self, name):

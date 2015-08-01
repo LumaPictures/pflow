@@ -103,6 +103,8 @@ Rules for creating components:
   waiting for some asynchronous task to complete).
 * Calls to `Port.send*()` or `Port.receive*()` implicitly call `Component.suspend()` in the `SingleProcessGraphRuntime`
   while waiting for data to arrive, so that they do not block greenlet execution.
+* You should always check that the return value of `Component.receive()` or `Component.receive_packet()` is not the
+  sentinel object `EndOfStream`, denoting that the port was closed.
 * Call `Component.terminate()` if you need to be explicit about terminating a component.
 * Unless you are explicitly calling `Component.suspend()` to wait on an async result, and are making a call to a 
   blocking operation (that gevent patches), you should add a `self.state = ComponentState.SUSPENDED` before the call.

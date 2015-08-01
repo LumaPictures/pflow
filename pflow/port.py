@@ -40,6 +40,9 @@ class Packet(object):
         return 'Packet(%s)' % self.value
 
 
+EndOfStream = object()
+
+
 class BracketPacket(Packet):
     """
     Special packet used for bracketing.
@@ -86,7 +89,7 @@ class Port(BasePort):
         :param allowed_types: list/set of allowed that can be passed through this port (or empty/None to allow any).
         """
         if not isinstance(name, basestring):
-            raise ValueError('name must be a string')
+            raise ValueError('name %s must be a string')
 
         self.name = name
 
@@ -197,7 +200,7 @@ class InputPort(Port):
 
         # Optional port with no connection
         if self.optional and not self.is_connected():
-            return None
+            return EndOfStream
         else:
             self._check_ready_state()
 
@@ -208,7 +211,9 @@ class InputPort(Port):
 
     def receive(self):
         packet = self.receive_packet()
-        if packet:
+        if packet is EndOfStream:
+            return packet
+        else:
             value = packet.value
             self.component.drop(packet)
             return value
@@ -283,12 +288,13 @@ class OutputPort(Port):
 
         :param packet: the Packet to send over this output port.
         """
-        from .core import ComponentState
-
         if self.optional and not self.is_connected():
             return
         else:
             self._check_ready_state()
+
+        if packet is EndOfStream:
+            raise ValueError('You can not send an EndOfStream downstream!')
 
         runtime = self.component.runtime
         runtime.send_port(self.component, self.name, packet)
@@ -339,11 +345,12 @@ class PortRegistry(object):
         self._port_type = port_type
         self._array_port_type = array_port_type
         self._required_superclasses = (port_type, array_port_type)
+
         if not all(issubclass(c, BasePort) for c
                    in self._required_superclasses):
             raise ValueError('required_superclass must be Port subclass')
 
-    def addPorts(self, *ports):
+    def add_ports(self, *ports):
         """
         Add a new port to the registry.
         """
@@ -364,12 +371,17 @@ class PortRegistry(object):
 
         return self
 
+    addPorts = add_ports
+
     def add(self, name, **kwargs):
         """
         Add a new port to the registry.
         """
+        if not isinstance(name, basestring):
+            raise ValueError('port name must be a string')
+
         port = self._port_type(name, **kwargs)
-        self.addPorts(port)
+        self.add_ports(port)
         return port
 
     def __getitem__(self, port_name):

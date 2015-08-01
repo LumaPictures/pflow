@@ -21,10 +21,13 @@ class Simple(Component):
 
     def run(self):
         while not self.is_terminated:
-            print "connected", self.inputs['in'].is_connected()
-            print "open", self.inputs['in'].is_open()
-            print "value", self.inputs['in'].receive()
-            print "-"
+            print "connected %s" % self.inputs['in'].is_connected()
+            print "open: %s" % self.inputs['in'].is_open()
+
+            value = self.inputs['in'].receive()
+            if value is not EndOfStream:
+                print "value: %s" % value
+                print "-"
 
 
 class SimpleGraph(Graph):
@@ -32,15 +35,43 @@ class SimpleGraph(Graph):
         self.set_initial_packet(Simple('Simple1').inputs['in'], 'foo')
 
 
+class HypeMachinePopularTracksReader(Component):
+    def initialize(self):
+        self.inputs.add_ports(InputPort('API_KEY',
+                                        allowed_types=[str]),
+                              InputPort('COUNT',
+                                        optional=True,
+                                        allowed_types=[int]))
+        self.outputs.add('OUT')
+
+    def run(self):
+        import requests
+
+        api_key = self.inputs['API_KEY'].receive()
+        if api_key is EndOfStream:
+            api_key = ''
+
+        count = self.inputs['COUNT'].receive()
+        if count is EndOfStream:
+            count = 10
+
+        response = requests.get('https://api.hypem.com/v2/tracks?sort=popular&key=%s&count=%d' %
+                                (api_key, count))
+        tracks = response.json()
+
+        for track in tracks:
+            self.outputs['OUT'].send(track)
+
+
 class HypeMachineTrackStringifier(Component):
     def initialize(self):
-        self.inputs.addPorts(InputPort('IN'))
-        self.outputs.addPorts(OutputPort('OUT'))
+        self.inputs.add_ports(InputPort('IN'))
+        self.outputs.add_ports(OutputPort('OUT'))
 
     def run(self):
         track = self.inputs['IN'].receive()
 
-        if track['artist'] and track['title']:
+        if track is not EndOfStream and track['artist'] and track['title']:
             transformed = '%(artist)s - %(title)s' % track
             self.outputs['OUT'].send(transformed)
 
@@ -112,9 +143,10 @@ class SuperAwesomeDemoGraph(Graph):
 
 
 def run_graph(graph):
-    log.debug('Runtime is: %s' % GraphRuntimeImpl.__name__)
-
     graph.write_graphml(os.path.expanduser('~/%s.graphml' % graph.name))
+
+    log.info('Running graph: %s' % graph.name)
+    log.debug('Runtime is: %s' % GraphRuntimeImpl.__name__)
 
     runtime = GraphRuntimeImpl(graph)
     runtime.execute()
@@ -129,7 +161,7 @@ def init_logger():
 
     # Console logger
     console = logging.StreamHandler()
-    console.setLevel(logging.DEBUG)
+    console.setLevel(logging.INFO)
     console.setFormatter(logging.Formatter('%(processName)-20s | %(levelname)-5s | %(name)s: %(message)s'))
     logging.getLogger('').addHandler(console)
 
@@ -145,8 +177,8 @@ def main():
 
     test_graphs = [
         SimpleGraph('SIMPLE'),
-        # SuperAwesomeDemoGraph('AWESOME_1'),
-        # PopularMusicGraph('MUSIC_1'),
+        SuperAwesomeDemoGraph('AWESOME_1'),
+        PopularMusicGraph('MUSIC_1'),
         #fbp_graph,
         #ProcessSpawningLogger('PROCSPAWN_1')
     ]
