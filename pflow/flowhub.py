@@ -5,6 +5,7 @@ import logging
 import time
 import json
 from abc import ABCMeta, abstractmethod
+from collections import OrderedDict
 
 import requests
 import gevent
@@ -152,7 +153,7 @@ class RuntimeApplication(geventwebsocket.WebSocketApplication):
 
     ### WebSocket transport handling ###
     @staticmethod
-    def protocol_name(self):
+    def protocol_name():
         # WebSocket sub-protocol
         return 'noflo'
 
@@ -310,7 +311,7 @@ if __name__ == '__main__':
         """
         This greenlet runs the websocket server that responds to runtime commands.
         """
-        r = geventwebsocket.Resource({'/': RuntimeApplication})
+        r = geventwebsocket.Resource(OrderedDict([('/', RuntimeApplication)]))
         s = geventwebsocket.WebSocketServer(('', ws_port), r)
         log.info('Runtime listening on %s' % ws_address)
         s.serve_forever()
@@ -323,7 +324,7 @@ if __name__ == '__main__':
             client.ping_runtime(runtime_id)
             gevent.sleep(30)  # Ping every 30 seconds
 
-    label = 'lumapflow'
+    label = 'foo bar'
     user_id = os.environ.get('FLOWHUB_USER_ID')
     runtime_id = os.environ.get('FLOWHUB_RUNTIME_ID')
     if not runtime_id:
