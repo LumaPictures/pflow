@@ -71,30 +71,7 @@ class DummyRuntime(object):
     Trivial example of how one can represent an FBP-ish/dataflow runtime
     """
     # Component library
-    components = {
-        "DummyComponent": {
-            'description': "An example component which does exactly nothing",
-            'inPorts': [
-                {
-                    'id': 'portA',
-                    'type': 'boolean',
-                    'description': 'A boolean port',
-                    'addressable': False,
-                    'required': True
-                },
-                {
-                    'id': 'portB',
-                    'type': 'any'
-                }
-            ],
-            'outPorts': [
-                {
-                    'id': 'out1',
-                    'type': 'string'
-                }
-            ],
-        },
-    }
+    components = {}
 
     def __init__(self):
         # A runtime can have multiple graphs
@@ -102,6 +79,57 @@ class DummyRuntime(object):
         # and the other "subgraphs" can be used as components
         self.graphs = {}
         self.started = False
+
+        self._build_spec()
+
+    def _build_spec(self):
+        from . import core
+        from . import components
+        import inspect
+
+        self.components = {}
+
+        for obj_name in dir(components):
+            obj = getattr(components, obj_name)
+            if (inspect.isclass(obj) and
+                    (obj != core.Component) and
+                    (not inspect.isabstract(obj)) and
+                    (not issubclass(obj, core.Graph)) and
+                    issubclass(obj, core.Component)):
+                self.components[obj_name] = self._create_component_spec(obj)
+
+    def _create_component_spec(self, component_class):
+        from . import core
+        if not issubclass(component_class, core.Component):
+            raise ValueError('component_class must be a Component')
+
+        component = component_class('FAKE_NAME')
+
+        spec = {
+            'description': (component.__doc__ or ''),
+            'inPorts': [
+                {
+                    'id': inport.name,
+                    'type': 'any',  # TODO
+                    'description': (inport.description or ''),
+                    'addressable': isinstance(inport, core.ArrayInputPort),
+                    'required': (not inport.optional)
+                }
+                for inport in component.inputs
+            ],
+            'outPorts': [
+                {
+                    'id': outport.name,
+                    'type': 'any',  # TODO
+                    'description': (outport.description or ''),
+                    'addressable': isinstance(outport, core.ArrayOutputPort),
+                    'required': (not outport.optional)
+                }
+                for outport in component.outputs
+            ]
+        }
+
+        return spec
 
     def start(self, graph_id):
         self.started = True

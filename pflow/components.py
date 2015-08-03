@@ -68,19 +68,19 @@ class Sleep(Component):
             self.outputs['OUT'].send_packet(packet)
 
 
-class Split(Component):
-    """
-    Splits inputs from IN to OUT[]
-    """
-    def initialize(self):
-        self.inputs.add_ports(InputPort('IN'))
-        self.outputs.add_ports(ArrayOutputPort('OUT', 10))
-
-    def run(self):
-        packet = self.inputs['IN'].receive_packet()
-        if packet is not EndOfStream:
-            for outp in self.outputs['OUT']:
-                outp.send_packet(packet)
+# class Split(Component):
+#     """
+#     Splits inputs from IN to OUT[]
+#     """
+#     def initialize(self):
+#         self.inputs.add_ports(InputPort('IN'))
+#         self.outputs.add_ports(ArrayOutputPort('OUT', 10))
+#
+#     def run(self):
+#         packet = self.inputs['IN'].receive_packet()
+#         if packet is not EndOfStream:
+#             for outp in self.outputs['OUT']:
+#                 outp.send_packet(packet)
 
 
 class RegexFilter(Component):
@@ -120,21 +120,21 @@ class RegexFilter(Component):
                 self.drop(packet)
 
 
-class Concat(Component):
-    """
-    Concatenates inputs from IN[] into OUT
-    """
-    def initialize(self):
-        self.inputs.add_ports(ArrayInputPort('IN', 10))
-        self.outputs.add_ports(OutputPort('OUT'))
-
-    def run(self):
-        for inp in self.inputs['IN']:
-            packet = inp.receive()
-            if packet is EndOfStream:
-                break
-
-            self.outputs['OUT'].send_packet(packet)
+# class Concat(Component):
+#     """
+#     Concatenates inputs from IN[] into OUT
+#     """
+#     def initialize(self):
+#         self.inputs.add_ports(ArrayInputPort('IN', 10))
+#         self.outputs.add_ports(OutputPort('OUT'))
+#
+#     def run(self):
+#         for inp in self.inputs['IN']:
+#             packet = inp.receive()
+#             if packet is EndOfStream:
+#                 break
+#
+#             self.outputs['OUT'].send_packet(packet)
 
 
 class Multiply(Component):
