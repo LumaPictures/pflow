@@ -340,7 +340,7 @@ class Graph(Component):
         unconnected ports.
         """
         for port in component.inputs:
-            if port.optional and not port.is_connected() and port.default is not None:
+            if port.optional and not port.is_connected():
                 self.set_initial_packet(port, port.default)
 
     def connect(self, source_output_port, target_input_port):

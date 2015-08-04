@@ -40,9 +40,15 @@ class Packet(object):
         return 'Packet(%s)' % self.value
 
 
-EndOfStream = object()
+class EndOfStreamType(object):
+    def __repr__(self):
+        return 'END OF STREAM'
+
+EndOfStream = EndOfStreamType()
 
 
+# FIXME: should we enforce that BracketPackets have no value attribute?  Create a BasePacket with no .value?
+# FIXME: create KeyedStartBracket and KeyedEndBracket for explicitness and easy type checking?
 class BracketPacket(Packet):
     """
     Special packet used for bracketing.
@@ -53,7 +59,8 @@ class BracketPacket(Packet):
         """
         :param key: an optional key used for random access bracketing (e.g. building dicts or arrays
                     without the need for strict stack behavior). Represents the begin/end of data
-                    for a given key.
+                    for a given key. Keyed and unkeyed brackets can be mixed,
+                    but every keyed StartBracket must have a keyed EndBracket.
         """
         super(BracketPacket, self).__init__(None)
         self.key = key
