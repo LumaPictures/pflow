@@ -167,6 +167,7 @@ class Runtime(object):
 
         executor = self._executors[graph_id]
         executor.stop()
+        del self._executors[graph_id]
 
     def _create_or_get_graph(self, graph_id):
         if graph_id not in self._graphs:
