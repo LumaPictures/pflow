@@ -1,12 +1,12 @@
 import json
 from abc import ABCMeta, abstractmethod
 
-from ..exc import GraphRuntimeError
+from ..exc import GraphExecutorError
 
 
-class GraphRuntime(object):
+class GraphExecutor(object):
     """
-    Runtimes are responsible for starting processes, scheduling execution,
+    Executors are responsible for running a single graph: starting processes, scheduling execution,
     and forwarding messages on Connections between Processes.
     """
     __metaclass__ = ABCMeta
@@ -25,7 +25,7 @@ class GraphRuntime(object):
         for component in graph.components:
             component.runtime = self
 
-    def create_component_runner(self, component):
+    def _create_component_runner(self, component):
         """
         Creates a run loop for a component thread.
 
@@ -61,6 +61,10 @@ class GraphRuntime(object):
         return component_loop
 
     @abstractmethod
+    def is_running(self):
+        pass
+
+    @abstractmethod
     def execute(self):
         """
         Executes the graph.
@@ -79,12 +83,13 @@ class GraphRuntime(object):
         pass
 
     @abstractmethod
-    def receive_port(self, component, port_name):
+    def receive_port(self, component, port_name, timeout=None):
         """
         Receives a packet from a component's input port.
 
         :param component: the component the packet is being received for.
         :param port_name: the name of the component's input port.
+        :param timeout: number of seconds to wait for the next packet before raising a exc.PortReceiveTimeout.
         :return: the received packet.
         """
         pass

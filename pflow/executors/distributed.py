@@ -1,10 +1,10 @@
-from .base import GraphRuntime
+from .base import GraphExecutor
 from ..core import ComponentState
-from ..exc import GraphRuntimeError
+from ..exc import GraphExecutorError
 
 
 # TODO: implement this
-class DistributedGraphRuntime(GraphRuntime):
+class DistributedGraphExecutor(GraphExecutor):
     """
     Executes a graph in parallel using multiple processes that may reside on multiple
     machines over a network, where each component is run in its own process.
@@ -13,7 +13,7 @@ class DistributedGraphRuntime(GraphRuntime):
     overhead in terms of execution and administration.
     """
     def __init__(self, graph):
-        super(DistributedGraphRuntime, self).__init__(graph)
+        super(DistributedGraphExecutor, self).__init__(graph)
 
     def execute(self):
         raise NotImplementedError

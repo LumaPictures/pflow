@@ -6,99 +6,93 @@ import time
 import json
 from abc import ABCMeta, abstractmethod
 from collections import OrderedDict
+import inspect
 
 import requests
 import gevent
 import geventwebsocket
 
-from . import utils
+from . import exc, core, utils
 
 log = logging.getLogger(__name__)
 
 
-class RegistryClient(object):
-    @abstractmethod
-    def register_runtime(self, runtime_id, user_id, label, address):
-        pass
-
-    def ping_runtime(self, runtime_id):
-        pass
-
-    @classmethod
-    def create_runtime_id(cls):
-        return uuid.uuid4().hex
-
-    @classmethod
-    def _ensure_http_success(cls, response):
-        if not (199 < response.status_code < 300):
-            raise Exception('Flow API returned error %d: %s' %
-                            (response.status_code, response.text))
-
-
-class FlowhubRegistryClient(RegistryClient):
+class Runtime(object):
+    """
+    Manages components, graphs, and executors.
+    """
     def __init__(self):
-        self._endpoint = 'http://api.flowhub.io'
         self.log = logging.getLogger(self.__class__.__name__)
 
-    def register_runtime(self, runtime_id, user_id, label, address):
-        payload = {
-            'id': runtime_id,
+        self._components = {}  # Component metadata, keyed by component name
+        self._graphs = {}  # Graph instances, keyed by graph ID
+        self._executors = {}  # GraphExecutor instances, keyed by graph ID
 
-            'label': label,
-            'type': 'pflow',
+        self.log.debug('Initialized runtime!')
 
-            'address': address,
-            'protocol': 'websocket',
+    @property
+    def all_component_specs(self):
+        specs = {}
+        for component_name, component_options in self._components.iteritems():
+            specs[component_name] = component_options['spec']
 
-            'user': user_id,
-            'secret': '9129923',  # unused
+        return specs
+
+    def register_component(self, component_class, overwrite=False):
+        """
+
+        :param component_class:
+        :param collection:
+        :param overwrite:
+        """
+        if not issubclass(component_class, core.Component):
+            raise ValueError('component_class must be a class that inherits from Component')
+
+        collection = component_class.__module__
+        normalized_name = '{0}/{1}'.format(component_class.__module__,
+                                           component_class.__name__)
+
+        if normalized_name in self._components and not overwrite:
+            raise exc.RuntimeError("Component {0} already registered".format(normalized_name))
+
+        self.log.debug('Registering component: {0}'.format(normalized_name))
+
+        self._components[component_class.__name__] = {
+            'class': component_class,
+            'spec': self._create_component_spec(component_class)
         }
 
-        self.log.info('Registering runtime %s for user %s...' % (runtime_id, user_id))
-        response = requests.put('%s/runtimes/%s' % (self._endpoint, runtime_id),
-                                data=json.dumps(payload),
-                                headers={'Content-type': 'application/json'})
-        self._ensure_http_success(response)
+    def register_module(self, module, overwrite=False):
+        """
 
-    def ping_runtime(self, runtime_id):
-        self.log.info('Pinging runtime %s...' % runtime_id)
-        response = requests.post('%s/runtimes/%s' % (self._endpoint, runtime_id))
-        self._ensure_http_success(response)
+        :param module:
+        :param collection:
+        :param overwrite:
+        """
+        if isinstance(module, basestring):
+            module = __import__(module)
 
+        if not inspect.ismodule(module):
+            raise ValueError('module must be either a module or the name of a module')
 
-class DummyRuntime(object):
-    """
-    Trivial example of how one can represent an FBP-ish/dataflow runtime
-    """
-    # Component library
-    components = {}
+        self.log.debug('Registering module: %s' % module.__name__)
 
-    def __init__(self):
-        # A runtime can have multiple graphs
-        # Normally only one toplevel / "main" can be ran,
-        # and the other "subgraphs" can be used as components
-        self.graphs = {}
-        self.started = False
+        registered = 0
+        for obj_name in dir(module):
+            class_obj = getattr(module, obj_name)
+            if (inspect.isclass(class_obj) and
+                    (class_obj != core.Component) and
+                    (not inspect.isabstract(class_obj)) and
+                    (not issubclass(class_obj, core.Graph)) and
+                    issubclass(class_obj, core.Component)):
+                self.register_component(class_obj, overwrite)
+                registered += 1
 
-        self._build_spec()
+        if registered == 0:
+            self.log.warn('No components were found in module: %s' % module.__name__)
 
-    def _build_spec(self):
-        from . import core
-        from . import components
-        import inspect
-
-        self.components = {}
-
-        for obj_name in dir(components):
-            obj = getattr(components, obj_name)
-            if (inspect.isclass(obj) and
-                    (obj != core.Component) and
-                    (not inspect.isabstract(obj)) and
-                    (not issubclass(obj, core.Graph)) and
-                    issubclass(obj, core.Component)):
-                self.components[obj_name] = self._create_component_spec(obj)
-
-    def _create_component_spec(self, component_class):
+    @classmethod
+    def _create_component_spec(cls, component_class):
         from . import core
         if not issubclass(component_class, core.Component):
             raise ValueError('component_class must be a Component')
@@ -131,53 +125,138 @@ class DummyRuntime(object):
 
         return spec
 
+    def is_started(self, graph_id):
+        if graph_id not in self._executors:
+            return False
+
+        return self._executors[graph_id].is_running()
+
     def start(self, graph_id):
-        self.started = True
+        """
+        Execute a graph.
+        """
+        self.log.debug('Graph %s: Starting execution' % graph_id)
+        from .executors.single_process import SingleProcessGraphExecutor
+
+        graph = self._graphs[graph_id]
+
+        if graph_id not in self._executors:
+            # Create executor
+            self.log.info('Creating executor for graph %s...' % graph_id)
+            executor = self._executors[graph_id] = SingleProcessGraphExecutor(graph)
+        else:
+            executor = self._executors[graph_id]
+
+        if executor.is_running():
+            raise ValueError('Graph %s is already started' % graph_id)
+
+        executor.execute()
 
     def stop(self, graph_id):
-        self.started = False
+        """
+        Stop executing a graph.
+        """
+        self.log.debug('Graph %s: Stopping execution')
+        if graph_id not in self._executors:
+            raise ValueError('Invalid graph: %s' % graph_id)
+
+        executor = self._executors[graph_id]
+        # TODO
+        raise NotImplementedError('can not stop graph execution yet')
+
+    def _create_or_get_graph(self, graph_id):
+        if graph_id not in self._graphs:
+            self._graphs[graph_id] = core.Graph(graph_id)
+
+        return self._graphs[graph_id]
 
     def new_graph(self, graph_id):
-        self.graphs[graph_id] = {
-            'nodes': {},
-            'connections': [],
-            'iips': []
-        }
+        """
+        Create a new graph.
+        """
+        self.log.debug('Graph %s: Initializing' % graph_id)
+        self._graphs[graph_id] = core.Graph(graph_id)
 
     def add_node(self, graph_id, node_id, component_id):
+        """
+        Add a component instance.
+        """
         # Normally you'd instantiate the component here,
         # we just store the name
-        nodes = self.graphs[graph_id]['nodes']
-        nodes[node_id] = component_id
+        self.log.debug('Graph %s: Adding node %s(%s)' % (graph_id, component_id, node_id))
+
+        graph = self._create_or_get_graph(graph_id)
+
+        component_class = self._components[component_id]['class']
+        component = component_class(node_id)
+        graph.add_component(component)
 
     def remove_node(self, graph_id, node_id):
-        # Destroy node instance
-        nodes = self.graphs[graph_id]['nodes']
-        del nodes[node_id]
+        """
+        Destroy component instance.
+        """
+        self.log.debug('Graph %s: Removing node %s' % (graph_id, node_id))
+
+        graph = self._create_or_get_graph(graph_id)
+        graph.remove_component(node_id)
 
     def add_edge(self, graph_id, src, tgt):
-        connections = self.graphs[graph_id]['connections']
-        connections.append((src, tgt))
+        """
+        Connect ports between components.
+        """
+        self.log.debug('Graph %s: Connecting ports: %s -> %s' % (graph_id, src, tgt))
+        graph = self._create_or_get_graph(graph_id)
+        # TODO: Connect ports
+        # connections = self._graphs[graph_id]['connections']
+        # connections.append((src, tgt))
+        pass
 
     def remove_edge(self, graph_id, src, tgt):
-        connections = self.graphs[graph_id]['connections']
-        connections = filter(lambda conn: conn[0] != src and conn[1] != tgt, connections)
+        """
+        Disconnect ports between components.
+        """
+        self.log.debug('Graph %s: Disconnecting ports: %s -> %s' % (graph_id, src, tgt))
+        graph = self._create_or_get_graph(graph_id)
+        # TODO: Disconnect ports
+        # connections = self._graphs[graph_id]['connections']
+        # connections = filter(lambda conn: conn[0] != src and conn[1] != tgt, connections)
+        pass
 
     def add_iip(self, graph_id, src, data):
-        iips = self.graphs[graph_id]['iips']
-        iips.append((src, data))
+        """
+        Set the inital packet for a component inport.
+        """
+        graph = self._create_or_get_graph(graph_id)
+        # TODO: component.set_initial_packet()
+        # iips = self._graphs[graph_id]['iips']
+        # iips.append((src, data))
+        pass
 
     def remove_iip(self, graph_id, src):
-        iips = self.graphs[graph_id]['iips']
-        iips = filter(lambda iip: iip[0] != src, iips)
+        """
+        Remove the initial packet for a component inport.
+        """
+        graph = self._create_or_get_graph(graph_id)
+        # TODO: graph.remove_node(iip_generator_node_on_src_port)
+        # iips = self._graphs[graph_id]['iips']
+        # iips = filter(lambda iip: iip[0] != src, iips)
+        pass
 
 
-# TODO: Use https://github.com/flowbased/fbp-spec or https://github.com/flowbased/fbp-protocol for testing protocol
 class RuntimeApplication(geventwebsocket.WebSocketApplication):
-    def __init__(self, runtime):
+    """
+    Web socket application that hosts a single Runtime.
+    """
+    def __init__(self, ws):
         super(RuntimeApplication, self).__init__(self)
-        self.runtime = DummyRuntime()
+
         self.log = logging.getLogger(self.__class__.__name__)
+
+        # TODO: Use a factory for creating this object, so that a Registry can be instantiated outside the WebSocketApplication constructor.
+        self.runtime = Runtime()
+
+        from . import components
+        self.runtime.register_module(components)
 
     ### WebSocket transport handling ###
     @staticmethod
@@ -200,12 +279,12 @@ class RuntimeApplication(geventwebsocket.WebSocketApplication):
             'runtime': self.handle_runtime,
             'component': self.handle_component,
             'graph': self.handle_graph,
-            'network': self.handle_network,
+            'network': self.handle_network
         }
 
         try:
             handler = dispatch[m.get('protocol')]
-        except KeyError, e:
+        except KeyError:
             self.log.warn("Subprotocol '%s' not supported" % p)
         else:
             handler(m['command'], m['payload'])
@@ -246,11 +325,7 @@ class RuntimeApplication(geventwebsocket.WebSocketApplication):
         # Practical minimum: be able to tell UI which components are available
         # This allows them to be listed, added, removed and connected together in the UI
         if command == 'list':
-            for component_name, component_data in self.runtime.components.items():
-                # Normally you'd have to do a bit of mapping between
-                # your internal/native representation of a component,
-                # and what the FBP protocol expects.
-                # We cheated and chose naming conventions that matched
+            for component_name, component_data in self.runtime.all_component_specs.iteritems():
                 payload = component_data
                 payload['name'] = component_name
                 self.send('component', 'component', payload)
@@ -300,7 +375,7 @@ class RuntimeApplication(geventwebsocket.WebSocketApplication):
 
     def handle_network(self, command, payload):
         def send_status(cmd, g):
-            started = self.runtime.started
+            started = self.runtime.is_started(g)
             # NOTE: running indicates network is actively running, data being processed
             # for this example, we consider ourselves running as long as we have been started
             running = started
@@ -324,6 +399,63 @@ class RuntimeApplication(geventwebsocket.WebSocketApplication):
             self.log.warn("Unknown command '%s' for protocol '%s'" % (command, 'network'))
 
 
+class RuntimeRegistry(object):
+    """
+    Represents a Runtime registry.
+    """
+    @abstractmethod
+    def register_runtime(self, runtime_id, user_id, label, address):
+        pass
+
+    def ping_runtime(self, runtime_id):
+        pass
+
+    @classmethod
+    def create_runtime_id(cls):
+        return uuid.uuid4().hex
+
+    @classmethod
+    def _ensure_http_success(cls, response):
+        if not (199 < response.status_code < 300):
+            raise Exception('Flow API returned error %d: %s' %
+                            (response.status_code, response.text))
+
+
+class FlowhubRegistry(RuntimeRegistry):
+    """
+    FlowHub runtime registry.
+    It's necessary to use this if you want to manage your graph in either FlowHub or NoFlo-UI.
+    """
+    def __init__(self):
+        self._endpoint = 'http://api.flowhub.io'
+        self.log = logging.getLogger(self.__class__.__name__)
+
+    def register_runtime(self, runtime_id, user_id, label, address):
+        payload = {
+            'id': runtime_id,
+
+            'label': label,
+            'type': 'pflow',
+
+            'address': address,
+            'protocol': 'websocket',
+
+            'user': user_id,
+            'secret': '9129923',  # unused
+        }
+
+        self.log.info('Registering runtime %s for user %s...' % (runtime_id, user_id))
+        response = requests.put('%s/runtimes/%s' % (self._endpoint, runtime_id),
+                                data=json.dumps(payload),
+                                headers={'Content-type': 'application/json'})
+        self._ensure_http_success(response)
+
+    def ping_runtime(self, runtime_id):
+        self.log.info('Pinging runtime %s...' % runtime_id)
+        response = requests.post('%s/runtimes/%s' % (self._endpoint, runtime_id))
+        self._ensure_http_success(response)
+
+
 if __name__ == '__main__':
     logging.basicConfig(level=logging.DEBUG)
     logging.getLogger('requests').setLevel(logging.WARN)
@@ -333,7 +465,7 @@ if __name__ == '__main__':
     ws_host = 'localhost'
     ws_port = 3569
     ws_address = 'ws://%s:%d' % (ws_host, ws_port)
-    client = FlowhubRegistryClient()
+    client = FlowhubRegistry()
 
     def runtime_websocket_server():
         """
@@ -356,7 +488,7 @@ if __name__ == '__main__':
     user_id = os.environ.get('FLOWHUB_USER_ID')
     runtime_id = os.environ.get('FLOWHUB_RUNTIME_ID')
     if not runtime_id:
-        runtime_id = FlowhubRegistryClient.create_runtime_id()
+        runtime_id = FlowhubRegistry.create_runtime_id()
 
     # Register runtime
     client.register_runtime(runtime_id, user_id, label, ws_address)

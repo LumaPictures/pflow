@@ -16,13 +16,13 @@ try:
 except ImportError:
     import Queue as queue  # 2.x
 
-from .base import GraphRuntime, NoopSerializer
+from .base import GraphExecutor, NoopSerializer
 from ..core import ComponentState
-from ..exc import GraphRuntimeError
+from ..exc import GraphExecutorError
 from ..port import Packet
 
 
-class MultiProcessGraphRuntime(GraphRuntime):
+class MultiProcessGraphExecutor(GraphExecutor):
     """
     Executes a graph in parallel using multiple processes, where each component is run in
     its own process.
@@ -31,10 +31,11 @@ class MultiProcessGraphRuntime(GraphRuntime):
     and is best suited for components that may tend to be CPU bound.
     """
     def __init__(self, graph):
-        super(MultiProcessGraphRuntime, self).__init__(graph)
+        super(MultiProcessGraphExecutor, self).__init__(graph)
         self._packet_serializer = NoopSerializer()
         self._in_queues = None
         self._out_queues = None
+        self._running = False
 
     def _create_wrapped_runner(self, component):
         """
@@ -44,7 +45,7 @@ class MultiProcessGraphRuntime(GraphRuntime):
         :param component:
         :return:
         """
-        run_loop = self.create_component_runner(component)
+        run_loop = self._create_component_runner(component)
 
         def wrapped_runner(*args):
             import sys
@@ -67,6 +68,7 @@ class MultiProcessGraphRuntime(GraphRuntime):
         return wrapped_runner
 
     def execute(self):
+        self._running = True
         self.log.debug('Executing %s' % self.graph)
 
         self._in_queues = {}
@@ -109,7 +111,11 @@ class MultiProcessGraphRuntime(GraphRuntime):
         for process in processes:
             process.join()
 
+        self._running = False
         self.log.debug('Finished graph execution')
+
+    def is_running(self):
+        return self._running
 
     def send_port(self, component, port_name, packet):
         self.log.debug('Sending packet to port %s.%s' % (component.name, port_name))
@@ -119,7 +125,11 @@ class MultiProcessGraphRuntime(GraphRuntime):
         q.put(self._packet_serializer.serialize(packet))
         component.state = ComponentState.ACTIVE
 
-    def receive_port(self, component, port_name):
+    def receive_port(self, component, port_name, timeout=None):
+        # TODO: implement timeout
+        if timeout is not None:
+            raise NotImplementedError('timeout not implemented')
+
         self.log.debug('Receiving packet on port %s.%s' % (component.name, port_name))
 
         q = self._get_inport_queue(component, port_name)

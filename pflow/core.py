@@ -12,7 +12,7 @@ from enum import Enum
 from . import utils, exc
 from . import parsefbp
 from .port import Packet, PortRegistry, InputPort, OutputPort, ArrayInputPort, ArrayOutputPort
-from .runtimes.base import RuntimeTarget
+from .executors.base import RuntimeTarget
 
 log = logging.getLogger(__name__)
 
@@ -283,6 +283,19 @@ class Graph(Component):
 
         self.components.add(component)
         return component
+
+    def remove_component(self, component):
+        if isinstance(component, basestring):
+            component_name = component
+            for c in self.components:
+                if c.name == component_name:
+                    component = c
+                    break
+
+        if not isinstance(component, Component):
+            raise ValueError('component must either be a Component object or the name of a component to remove')
+
+        self.components.remove(component)
 
     def set_initial_packet(self, port, value):
         iip = InitialPacketGenerator(value)

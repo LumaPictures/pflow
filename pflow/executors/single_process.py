@@ -35,13 +35,13 @@ except ImportError:
 
 import gevent
 
-from .base import GraphRuntime
+from .base import GraphExecutor
 from ..core import ComponentState
 from ..port import EndOfStream
 from .. import exc
 
 
-class SingleProcessGraphRuntime(GraphRuntime):
+class SingleProcessGraphExecutor(GraphExecutor):
     """
     Executes a graph in a single process, where each component is run in its own gevent coroutine.
 
@@ -49,14 +49,16 @@ class SingleProcessGraphRuntime(GraphRuntime):
     or when components are mostly I/O bound (i.e. don't need process parallelization).
     """
     def __init__(self, graph):
-        super(SingleProcessGraphRuntime, self).__init__(graph)
+        super(SingleProcessGraphExecutor, self).__init__(graph)
         self._recv_queues = None
+        self._running = False
 
     def execute(self):
+        self._running = True
         self.log.debug('Executing %s' % self.graph)
 
         self._recv_queues = collections.defaultdict(queue.Queue)
-        coroutines = dict([(gevent.spawn(self.create_component_runner(component),
+        coroutines = dict([(gevent.spawn(self._create_component_runner(component),
                                          None,   # in_queues
                                          None),  # out_queues
                             component)
@@ -82,7 +84,11 @@ class SingleProcessGraphRuntime(GraphRuntime):
         # Wait for all coroutines to terminate
         gevent.wait(coroutines.keys())
 
+        self._running = False
         self.log.debug('Finished graph execution')
+
+    def is_running(self):
+        return self._running
 
     def send_port(self, component, port_name, packet):
         dest_port = component.outputs[port_name].target_port
@@ -93,7 +99,11 @@ class SingleProcessGraphRuntime(GraphRuntime):
         component.suspend()
         component.state = ComponentState.ACTIVE
 
-    def receive_port(self, component, port_name):
+    def receive_port(self, component, port_name, timeout=None):
+        # TODO: implement timeout
+        if timeout is not None:
+            raise NotImplementedError('timeout not implemented')
+
         source_port = component.inputs[port_name]
         if not source_port.is_open():
             return

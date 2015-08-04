@@ -3,10 +3,10 @@ import os
 use_multi_process = (os.environ.get('PFLOW_MULTIPROCESS', '') == '1')
 
 if use_multi_process:
-    from pflow.runtimes.multi_process import MultiProcessGraphRuntime as GraphRuntimeImpl
+    from pflow.executors.multi_process import MultiProcessGraphExecutor as GraphExecutorImpl
 else:
     # Need to load before logging
-    from pflow.runtimes.single_process import SingleProcessGraphRuntime as GraphRuntimeImpl
+    from pflow.executors.single_process import SingleProcessGraphExecutor as GraphExecutorImpl
 
 import logging
 
@@ -146,10 +146,10 @@ def run_graph(graph):
     graph.write_graphml(os.path.expanduser('~/%s.graphml' % graph.name))
 
     log.info('Running graph: %s' % graph.name)
-    log.debug('Runtime is: %s' % GraphRuntimeImpl.__name__)
+    log.debug('Runtime is: %s' % GraphExecutorImpl.__name__)
 
-    runtime = GraphRuntimeImpl(graph)
-    runtime.execute()
+    executor = GraphExecutorImpl(graph)
+    executor.execute()
 
 
 def init_logger():

@@ -5,7 +5,7 @@ class FlowError(Exception):
     pass
 
 
-class GraphRuntimeError(FlowError):
+class GraphExecutorError(FlowError):
     pass
 
 
@@ -34,4 +34,14 @@ class PortClosedError(PortError):
     """
     Port is closed.
     """
+    pass
+
+
+class PortReceiveTimeout(PortError):
+    """
+    Timed out while waiting for a receive() on an InputPort.
+    """
+
+
+class RuntimeError(Exception):
     pass
