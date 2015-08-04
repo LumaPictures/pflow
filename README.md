@@ -1,6 +1,7 @@
 # pflow
 
 [![Build Status](https://travis-ci.org/Flushot/pflow.svg)](https://travis-ci.org/Flushot/pflow)
+[![Coverage Status](https://coveralls.io/repos/Flushot/pflow/badge.svg?branch=master&service=github)](https://coveralls.io/github/Flushot/pflow?branch=master)
 
 [ TODO: Improve documentation ]
 

@@ -81,7 +81,7 @@ class Port(BasePort):
     __metaclass__ = ABCMeta
 
     def __init__(self, name, description=None, optional=True,
-                 allowed_types=None, default=None):
+                 allowed_types=None, default=None, max_queue_size=None):
         """
         :param name: the unique (per-component) name of this port.
         :param description: an optional description of what this port is used for.
@@ -117,6 +117,11 @@ class Port(BasePort):
             self.allowed_types = set()
 
         self.default = default
+
+        # If queue_max_size is set, it limits the queue size so that a component can apply backpressure
+        # by causing the adjacent component to block on send/receive when the queue is full.
+        self.max_queue_size = max_queue_size
+
         self.component = None  # Owning component
         self._is_open = True
 

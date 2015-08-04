@@ -14,6 +14,7 @@ install_requires = [
     #'haigha',  # amqp
     'pyparsing',  # fbp grammar
     'gevent-websocket',  # fbp network runtime
+    'python-coveralls',  # code coverage
 
     # Component-specific stuff
     'requests',
