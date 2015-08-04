@@ -42,7 +42,8 @@ class HypeMachinePopularTracksReader(Component):
                               InputPort('COUNT',
                                         optional=True,
                                         allowed_types=[int]))
-        self.outputs.add('OUT')
+        self.outputs.add_ports(OutputPort('OUT',
+                                          max_queue_size=1))  # causes each send() to suspend
 
     def run(self):
         import requests

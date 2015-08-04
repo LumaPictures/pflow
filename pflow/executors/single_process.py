@@ -37,7 +37,7 @@ import gevent
 
 from .base import GraphExecutor
 from ..core import ComponentState
-from ..port import EndOfStream
+from ..port import Port, EndOfStream
 from .. import exc
 
 
@@ -90,9 +90,19 @@ class SingleProcessGraphExecutor(GraphExecutor):
     def is_running(self):
         return self._running
 
+    def _get_or_create_queue(self, port):
+        if not isinstance(port, Port):
+            raise ValueError('port must be a Port')
+
+        if port.id not in self._recv_queues:
+            self._recv_queues[port.id] = queue.Queue(maxsize=port.max_queue_size)
+
+        return self._recv_queues[port.id]
+
     def send_port(self, component, port_name, packet):
         dest_port = component.outputs[port_name].target_port
-        q = self._recv_queues[dest_port.id]
+        q = self._get_or_create_queue(dest_port)
+
         self.log.debug('Sending packet to %s: %s' % (dest_port, packet))
         component.state = ComponentState.SUSP_SEND
         q.put(packet)
@@ -108,7 +118,8 @@ class SingleProcessGraphExecutor(GraphExecutor):
         if not source_port.is_open():
             return
 
-        q = self._recv_queues[source_port.id]
+        q = self._get_or_create_queue(source_port)
+
         component.state = ComponentState.SUSP_RECV
         while not component.is_terminated:
             try:

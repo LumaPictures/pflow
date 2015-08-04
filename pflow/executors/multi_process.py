@@ -81,7 +81,7 @@ class MultiProcessGraphExecutor(GraphExecutor):
                 if out_port.is_connected():
                     edges.add(((component.name, out_port.name),
                                (out_port.target_port.component.name, out_port.target_port.name),
-                               mp.Queue()))
+                               mp.Queue(maxsize=out_port.target_port.max_queue_size)))
 
         # Start all processes
         self.log.debug('Starting %d processes...' % len(self.graph.components))
