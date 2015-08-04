@@ -73,7 +73,7 @@ You can find some premade components in the `pflow.components` module. If you ca
 you can always create a custom component by subclassing `pflow.core.Component`, then overriding the `initialize()` 
 and `run()` methods:
 
-    from pflow.core import Component, InputPort, OutputPort
+    from pflow.core import Component, InputPort, OutputPort, EndOfStream
     
     
     class MySleepComponent(Component):
@@ -87,8 +87,9 @@ and `run()` methods:
            
         def run(self):
             input_packet = self.inputs['IN'].receive_packet()
-            time.sleep(5)
-            self.outputs['OUT'].send_packet(input_packet)
+            if input_packet is not EndOfStream:
+                time.sleep(5)
+                self.outputs['OUT'].send_packet(input_packet)
 
 ### Component Design
 
@@ -97,18 +98,15 @@ Rules for creating components:
 * The `Component.initialize()` method is used for setting up ports and any initial state.
 * The `Component.run()` method is called by the runtime every time there's a new packet arrives on the `InputPort`
   and hasn't been received yet.
-* Components will automatically suspend execution after `Component.run()` completes, and will await the next packet
-  unless there is no more data to receive and all upstream components have been terminated. In that case, the component
-  will terminate execution.
+* Components will automatically terminate execution after `Component.run()` completes and all upstream components
+  have been terminated as well.
+* Call `Component.terminate()` if you need to be explicit about terminating a component.
 * Call `Component.suspend()` if you need to be explicit about suspending execution (typically done in loops or when 
   waiting for some asynchronous task to complete).
-* Calls to `Port.send*()` or `Port.receive*()` implicitly call `Component.suspend()` in the `SingleProcessGraphRuntime`
+* Calls to `Port.send*()` or `Port.receive*()` implicitly call `Component.suspend()` in the `SingleProcessGraphExecutor`
   while waiting for data to arrive, so that they do not block greenlet execution.
 * You should always check that the return value of `Component.receive()` or `Component.receive_packet()` is not the
   sentinel object `EndOfStream`, denoting that the port was closed.
-* Call `Component.terminate()` if you need to be explicit about terminating a component.
-* Unless you are explicitly calling `Component.suspend()` to wait on an async result, and are making a call to a 
-  blocking operation (that gevent patches), you should add a `self.state = ComponentState.SUSPENDED` before the call.
 
 ### Component States
 
@@ -120,6 +118,7 @@ Rules for creating components:
 | **ACTIVE** | Component has received data and is actively running. |
 | **SUSP_SEND** | Component is waiting for data to send on its output port. |
 | **SUSP_RECV** | Component is waiting to receive data on its input port. |
+| **DORMANT** | Component will terminate if no more send/recv calls are made and its run() method exits. |
 | **TERMINATED** | Component has successfully terminated execution (final state). |
 | **ERROR** | Component has terminated execution because of an error (final state). |
 

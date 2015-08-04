@@ -84,6 +84,7 @@ class SingleProcessGraphExecutor(GraphExecutor):
         # Wait for all coroutines to terminate
         gevent.wait(self._coroutines.keys())
 
+        self._reset_components()
         self._running = False
         self.log.debug('Finished graph execution')
 
@@ -100,14 +101,21 @@ class SingleProcessGraphExecutor(GraphExecutor):
         return self._recv_queues[port.id]
 
     def send_port(self, component, port_name, packet):
-        dest_port = component.outputs[port_name].target_port
+        source_port = component.outputs[port_name]
+        dest_port = source_port.target_port
         q = self._get_or_create_queue(dest_port)
 
-        self.log.debug('Sending packet to %s: %s' % (dest_port, packet))
+        last_state = component.state
         component.state = ComponentState.SUSP_SEND
+
+        self.log.debug('Sending packet from %s to %s: %s' %
+                       (source_port, dest_port, packet))
+
         q.put(packet)
         component.suspend()
-        component.state = ComponentState.ACTIVE
+
+        if component.state == ComponentState.SUSP_SEND:
+            component.state = last_state
 
     def receive_port(self, component, port_name, timeout=None):
         # TODO: implement timeout
@@ -130,13 +138,14 @@ class SingleProcessGraphExecutor(GraphExecutor):
             except queue.Empty:
                 if self.graph.is_upstream_terminated(component):
                     # No more data left to receive_packet and upstream has terminated.
-                    component.state = ComponentState.TERMINATED
-                    if source_port.is_open():
-                        source_port.close()
+                    component.state = ComponentState.DORMANT
+
+                    # if source_port.is_open():
+                    #     source_port.close()
 
                     return EndOfStream
                 else:
-                    #self.log.debug('%s is waiting for packet on %s' % (component, source_port_id))
+                    # self.log.debug('%s is waiting for packet on %s' % (component, source_port))
                     component.suspend()
 
     def close_input_port(self, component, port_name):

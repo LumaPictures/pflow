@@ -20,7 +20,7 @@ def random_id():
     """
     Generates a random hex string ID value.
     """
-    return uuid.uuid4().hex
+    return str(uuid.uuid4())
 
 
 def pluck(seq, key):

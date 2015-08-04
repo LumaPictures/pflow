@@ -2,14 +2,17 @@
 from .executors.single_process import SingleProcessGraphExecutor
 
 import os
+import sys
 import uuid
 import logging
-import time
+import socket
 import json
 from abc import ABCMeta, abstractmethod
 from collections import OrderedDict
 import inspect
+import functools
 
+import argparse
 import requests
 import gevent
 import geventwebsocket
@@ -56,7 +59,7 @@ class Runtime(object):
                                            component_class.__name__)
 
         if normalized_name in self._components and not overwrite:
-            raise exc.RuntimeError("Component {0} already registered".format(normalized_name))
+            raise ValueError("Component {0} already registered".format(normalized_name))
 
         self.log.debug('Registering component: {0}'.format(normalized_name))
 
@@ -271,183 +274,198 @@ class Runtime(object):
         graph.unset_initial_packet(target_port)
 
 
-class RuntimeApplication(geventwebsocket.WebSocketApplication):
-    """
-    Web socket application that hosts a single Runtime.
-    """
-    def __init__(self, ws):
-        super(RuntimeApplication, self).__init__(self)
-
-        self.log = logging.getLogger('%s.%s' % (self.__class__.__module__,
-                                                self.__class__.__name__))
-
-        # TODO: Use a factory for creating this object, so that a Registry can be instantiated outside the WebSocketApplication constructor.
-        self.runtime = Runtime()
-
-        from . import components
-        self.runtime.register_module(components)
-
-    ### WebSocket transport handling ###
-    @staticmethod
-    def protocol_name():
-        # WebSocket sub-protocol
-        return 'noflo'
-
-    def on_open(self):
-        self.log.info("Connection opened")
-
-    def on_close(self, reason):
-        self.log.info("Connection closed. Reason: %s" % reason)
-
-    def on_message(self, message, **kwargs):
-        if not message:
-            self.log.warn('Got empty message')
-
-        m = json.loads(message)
-        dispatch = {
-            'runtime': self.handle_runtime,
-            'component': self.handle_component,
-            'graph': self.handle_graph,
-            'network': self.handle_network
-        }
-
-        try:
-            handler = dispatch[m.get('protocol')]
-        except KeyError:
-            self.log.warn("Subprotocol '%s' not supported" % p)
-        else:
-            handler(m['command'], m['payload'])
-
-    def send(self, protocol, command, payload):
+def create_websocket_application(runtime):
+    class RuntimeApplication(geventwebsocket.WebSocketApplication):
         """
-        Send a message to UI/client
+        Web socket application that hosts a single Runtime.
         """
-        self.ws.send(json.dumps({'protocol': protocol,
-                                 'command': command,
-                                 'payload': payload}))
+        def __init__(self, ws):
+            super(RuntimeApplication, self).__init__(self)
 
-    ### Protocol send/responses ###
-    def handle_runtime(self, command, payload):
-        # Absolute minimum: be able to tell UI info about runtime and supported capabilities
-        if command == 'getruntime':
-            payload = {
-                'type': 'fbp-python-example',
-                'version': '0.4',  # protocol version
-                'capabilities': [
-                    'protocol:component',
-                    'protocol:network'
-                ],
+            self.log = logging.getLogger('%s.%s' % (self.__class__.__module__,
+                                                    self.__class__.__name__))
+
+            # if not isinstance(runtime, Runtime):
+            #     raise ValueError('runtime must be a Runtime, but was %s' % runtime)
+
+            self.runtime = runtime
+
+        ### WebSocket transport handling ###
+        @staticmethod
+        def protocol_name():
+            """
+            WebSocket sub-protocol
+            """
+            return 'noflo'
+
+        def on_open(self):
+            self.log.info("Connection opened")
+
+        def on_close(self, reason):
+            self.log.info("Connection closed. Reason: %s" % reason)
+
+        def on_message(self, message, **kwargs):
+            if not message:
+                self.log.warn('Got empty message')
+
+            m = json.loads(message)
+            dispatch = {
+                'runtime': self.handle_runtime,
+                'component': self.handle_component,
+                'graph': self.handle_graph,
+                'network': self.handle_network
             }
-            self.send('runtime', 'runtime', payload)
 
-        # network:packet, allows sending data in/out to networks in this runtime
-        # can be used to represent the runtime as a FBP component in bigger system "remote subgraph"
-        elif command == 'packet':
-            # We don't actually run anything, just echo input back and pretend it came from "out"
-            payload['port'] = 'out'
-            self.send('runtime', 'packet', payload)
+            try:
+                handler = dispatch[m.get('protocol')]
+            except KeyError:
+                self.log.warn("Subprotocol '%s' not supported" % p)
+            else:
+                handler(m['command'], m['payload'])
 
-        else:
-            self.log.warn("Unknown command '%s' for protocol '%s' " % (command, 'runtime'))
+        def send(self, protocol, command, payload):
+            """
+            Send a message to UI/client
+            """
+            self.ws.send(json.dumps({'protocol': protocol,
+                                     'command': command,
+                                     'payload': payload}))
 
-    def handle_component(self, command, payload):
-        # Practical minimum: be able to tell UI which components are available
-        # This allows them to be listed, added, removed and connected together in the UI
-        if command == 'list':
-            for component_name, component_data in self.runtime.all_component_specs.iteritems():
-                payload = component_data
-                payload['name'] = component_name
-                self.send('component', 'component', payload)
+        ### Protocol send/responses ###
+        def handle_runtime(self, command, payload):
+            # Absolute minimum: be able to tell UI info about runtime and supported capabilities
+            if command == 'getruntime':
+                payload = {
+                    'type': 'fbp-python-example',
+                    'version': '0.4',  # protocol version
+                    'capabilities': [
+                        'protocol:component',
+                        'protocol:network'
+                    ],
+                }
+                self.send('runtime', 'runtime', payload)
 
-        else:
-            self.log.warn("Unknown command '%s' for protocol '%s' " % (command, 'component'))
+            # network:packet, allows sending data in/out to networks in this runtime
+            # can be used to represent the runtime as a FBP component in bigger system "remote subgraph"
+            elif command == 'packet':
+                # We don't actually run anything, just echo input back and pretend it came from "out"
+                payload['port'] = 'out'
+                self.send('runtime', 'packet', payload)
 
-    def handle_graph(self, command, payload):
-        # Modify our graph representation to match that of the UI/client
-        # Note: if it is possible for the graph state to be changed by other things than the client
-        # you must send a message on the same format, informing the client about the change
-        # Normally done using signals,observer-pattern or similar
+            else:
+                self.log.warn("Unknown command '%s' for protocol '%s' " % (command, 'runtime'))
 
-        send_ack = True
+        def handle_component(self, command, payload):
+            # Practical minimum: be able to tell UI which components are available
+            # This allows them to be listed, added, removed and connected together in the UI
+            if command == 'list':
+                for component_name, component_data in self.runtime.all_component_specs.iteritems():
+                    payload = component_data
+                    payload['name'] = component_name
+                    self.send('component', 'component', payload)
 
-        # New graph
-        if command == 'clear':
-            self.runtime.new_graph(payload['id'])
-        # Nodes
-        elif command == 'addnode':
-            self.runtime.add_node(payload['graph'], payload['id'], payload['component'])
-        elif command == 'removenode':
-            self.runtime.remove_node(payload['graph'], payload['id'])
-        # Edges/connections
-        elif command == 'addedge':
-            self.runtime.add_edge(payload['graph'], payload['src'], payload['tgt'])
-        elif command == 'removeedge':
-            self.runtime.remove_edge(payload['graph'], payload['src'], payload['tgt'])
-        # IIP / literals
-        elif command == 'addinitial':
-            self.runtime.add_iip(payload['graph'], payload['tgt'], payload['src']['data'])
-        elif command == 'removeinitial':
-            self.runtime.remove_iip(payload['graph'], payload['tgt'])
-        # Exported ports
-        elif command in ('addinport', 'addoutport'):
-            pass  # No support in this example
-        # Metadata changes
-        elif command in ('changenode',):
-            pass
-        else:
-            send_ack = False
-            self.log.warn("Unknown command '%s' for protocol '%s' " % (command, 'graph'))
+            else:
+                self.log.warn("Unknown command '%s' for protocol '%s' " % (command, 'component'))
 
-        # For any message we respected, send same in return as acknowledgement
-        if send_ack:
-            self.send('graph', command, payload)
+        def handle_graph(self, command, payload):
+            # Modify our graph representation to match that of the UI/client
+            # Note: if it is possible for the graph state to be changed by other things than the client
+            # you must send a message on the same format, informing the client about the change
+            # Normally done using signals,observer-pattern or similar
 
-    def handle_network(self, command, payload):
-        def send_status(cmd, g):
-            started = self.runtime.is_started(g)
-            # NOTE: running indicates network is actively running, data being processed
-            # for this example, we consider ourselves running as long as we have been started
-            running = started
-            payload = {
-                graph: g,
-                started: started,
-                running: running,
-            }
-            self.send('network', cmd, payload)
+            send_ack = True
 
-        graph = payload.get('graph', None)
-        if command == 'getstatus':
-            send_status('status', graph)
-        elif command == 'start':
-            self.runtime.start(graph)
-            send_status('started', graph)
-        elif command == 'stop':
-            self.runtime.stop(graph)
-            send_status('started', graph)
-        else:
-            self.log.warn("Unknown command '%s' for protocol '%s'" % (command, 'network'))
+            # New graph
+            if command == 'clear':
+                self.runtime.new_graph(payload['id'])
+            # Nodes
+            elif command == 'addnode':
+                self.runtime.add_node(payload['graph'], payload['id'], payload['component'])
+            elif command == 'removenode':
+                self.runtime.remove_node(payload['graph'], payload['id'])
+            # Edges/connections
+            elif command == 'addedge':
+                self.runtime.add_edge(payload['graph'], payload['src'], payload['tgt'])
+            elif command == 'removeedge':
+                self.runtime.remove_edge(payload['graph'], payload['src'], payload['tgt'])
+            # IIP / literals
+            elif command == 'addinitial':
+                self.runtime.add_iip(payload['graph'], payload['tgt'], payload['src']['data'])
+            elif command == 'removeinitial':
+                self.runtime.remove_iip(payload['graph'], payload['tgt'])
+            # Exported ports
+            elif command in ('addinport', 'addoutport'):
+                pass  # No support in this example
+            # Metadata changes
+            elif command in ('changenode',):
+                pass
+            else:
+                send_ack = False
+                self.log.warn("Unknown command '%s' for protocol '%s' " % (command, 'graph'))
+
+            # For any message we respected, send same in return as acknowledgement
+            if send_ack:
+                self.send('graph', command, payload)
+
+        def handle_network(self, command, payload):
+            def send_status(cmd, g):
+                started = self.runtime.is_started(g)
+                # NOTE: running indicates network is actively running, data being processed
+                # for this example, we consider ourselves running as long as we have been started
+                running = started
+                payload = {
+                    graph: g,
+                    started: started,
+                    running: running,
+                }
+                self.send('network', cmd, payload)
+
+            graph = payload.get('graph', None)
+            if command == 'getstatus':
+                send_status('status', graph)
+            elif command == 'start':
+                self.runtime.start(graph)
+                send_status('started', graph)
+            elif command == 'stop':
+                self.runtime.stop(graph)
+                send_status('started', graph)
+            else:
+                self.log.warn("Unknown command '%s' for protocol '%s'" % (command, 'network'))
+
+    return RuntimeApplication
 
 
 class RuntimeRegistry(object):
     """
-    Represents a Runtime registry.
+    Runtime registry.
     """
+    __metaclass__ = ABCMeta
+
     @abstractmethod
     def register_runtime(self, runtime_id, user_id, label, address):
+        """
+
+        :param runtime_id:
+        :param user_id:
+        :param label:
+        :param address:
+        """
         pass
 
     def ping_runtime(self, runtime_id):
+        """
+
+        :param runtime_id:
+        """
         pass
 
     @classmethod
     def create_runtime_id(cls):
-        return uuid.uuid4().hex
+        """
 
-    @classmethod
-    def _ensure_http_success(cls, response):
-        if not (199 < response.status_code < 300):
-            raise Exception('Flow API returned error %d: %s' %
-                            (response.status_code, response.text))
+        :return:
+        """
+        return str(uuid.uuid4())
 
 
 class FlowhubRegistry(RuntimeRegistry):
@@ -486,50 +504,98 @@ class FlowhubRegistry(RuntimeRegistry):
         response = requests.post('%s/runtimes/%s' % (self._endpoint, runtime_id))
         self._ensure_http_success(response)
 
+    @classmethod
+    def _ensure_http_success(cls, response):
+        if not (199 < response.status_code < 300):
+            raise Exception('Flow API returned error %d: %s' %
+                            (response.status_code, response.text))
 
-if __name__ == '__main__':
-    logging.basicConfig(level=logging.DEBUG)
-    logging.getLogger('requests').setLevel(logging.WARN)
-    logging.getLogger('pflow.core').setLevel(logging.INFO)
-    logging.getLogger('pflow.components').setLevel(logging.INFO)
-    logging.getLogger('pflow.executors').setLevel(logging.INFO)
 
-    #ws_host = socket.gethostname()
-    #ws_port = utils.get_free_tcp_port()
-    ws_host = 'localhost'
-    ws_port = 3569
-    ws_address = 'ws://%s:%d' % (ws_host, ws_port)
-    client = FlowhubRegistry()
+def main():
+    # Argument defaults
+    defaults = {
+        'host': socket.gethostname(),
+        'port': 3569
+    }
 
-    def runtime_websocket_server():
+    # Parse arguments
+    argp = argparse.ArgumentParser(description='Runtime that responds to commands sent over the network, '
+                                               'managing and executing graphs.')
+    argp.add_argument('-u', '--user-id', required=True, metavar='UUID',
+                      help='FlowHub user ID (get this from NoFlo-UI)')
+    argp.add_argument('-r', '--runtime-id', metavar='UUID',
+                      help='FlowHub unique runtime ID (generated if none specified)')
+    argp.add_argument('-l', '--label', required=True, metavar='LABEL_NAME',
+                      help="Name of this runtime (this is displayed in the UI's list of runtimes)")
+
+    argp.add_argument('--host', default=defaults['host'], metavar='HOSTNAME',
+                      help='Listen host for websocket (default: %(host)s)' % defaults)
+    argp.add_argument('--port', type=int, default=3569, metavar='PORT',
+                      help='Listen port for websocket (default: %(port)d)' % defaults)
+
+    argp.add_argument('-v', '--verbose', action='store_true',
+                      help='Enable verbose logging')
+    # TODO: add arg for executor type (multiprocess, singleprocess, distributed)
+    # TODO: add args for component search paths
+    args = argp.parse_args()
+
+    # Configure logging
+    logging.basicConfig(level=logging.DEBUG if args.verbose else logging.INFO)
+    if not args.verbose:
+        logger_levels = {
+            'requests': logging.WARN,
+            'geventwebsocket': logging.INFO,
+            'sh': logging.WARN,
+
+            'pflow.core': logging.INFO,
+            'pflow.components': logging.INFO,
+            'pflow.executors': logging.INFO
+        }
+        for logger_name, logger_level in logger_levels.items():
+            logging.getLogger(logger_name).setLevel(logger_level)
+
+    def runtime_task():
         """
-        This greenlet runs the websocket server that responds to runtime commands.
+        This greenlet runs the websocket server that responds remote commands that
+        inspect/manipulate the Runtime.
         """
-        r = geventwebsocket.Resource(OrderedDict([('/', RuntimeApplication)]))
-        s = geventwebsocket.WebSocketServer(('', ws_port), r)
-        log.info('Runtime listening on %s' % ws_address)
+        from . import components
+
+        runtime = Runtime()
+        runtime.register_module(components)
+
+        r = geventwebsocket.Resource(OrderedDict([('/', create_websocket_application(runtime))]))
+        s = geventwebsocket.WebSocketServer(('', args.port), r)
         s.serve_forever()
 
-    def registry_pinger():
+    def registration_task():
         """
-        This greenlet occasionally pings the registered runtime to keep it alive.
+        This greenlet will register the runtime with FlowHub and occasionally ping the
+        endpoint to keep the runtime alive.
         """
+        flowhub = FlowhubRegistry()
+
+        runtime_id = args.runtime_id
+        if not runtime_id:
+            runtime_id = FlowhubRegistry.create_runtime_id()
+            log.warn('No runtime ID was specified in FLOWHUB_RUNTIME_ID, so one was generated: %s' % runtime_id)
+
+        # Register runtime
+        flowhub.register_runtime(runtime_id, args.user_id, args.label,
+                                 'ws://%s:%d' % (args.host, args.port))
+
+        # Ping
+        delay_secs = 60  # Ping every minute
         while True:
-            client.ping_runtime(runtime_id)
-            gevent.sleep(30)  # Ping every 30 seconds
+            flowhub.ping_runtime(runtime_id)
+            gevent.sleep(delay_secs)
 
-    label = 'foo bar'
-    user_id = os.environ.get('FLOWHUB_USER_ID')
-    runtime_id = os.environ.get('FLOWHUB_RUNTIME_ID')
-    if not runtime_id:
-        runtime_id = FlowhubRegistry.create_runtime_id()
+    # Start!
+    gevent.wait([
+        gevent.spawn(runtime_task),
+        gevent.spawn(registration_task)
+    ])
 
-    # Register runtime
-    client.register_runtime(runtime_id, user_id, label, ws_address)
 
-    greenlets = [
-        gevent.spawn(runtime_websocket_server),
-        gevent.spawn(registry_pinger)
-    ]
-
-    gevent.wait(greenlets)
+if __name__ == '__main__':
+    main()

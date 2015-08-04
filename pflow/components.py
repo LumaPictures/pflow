@@ -54,7 +54,7 @@ class Sleep(Component):
             delay_value = 0
 
         if delay_value == 0:
-            self.log.warn('Using a %s component with 0 DELAY is the same as using Repeat' %
+            self.log.warn('Using a %s component with no DELAY is the same as using Repeat' %
                           self.__class__.__name__)
 
         while not self.is_terminated:
@@ -203,21 +203,21 @@ class ConsoleLineWriter(Component):
             print message
 
 
-class LogTap(Graph):
-    """
-    Taps an input stream by receiving inputs from IN, sending them
-    to the console log, and forwarding them to OUT.
-    """
-    def initialize(self):
-        self.inputs.add_ports(InputPort('IN'))
-        self.outputs.add_ports(OutputPort('OUT'))
-
-        tap = Split('TAP')
-        log = ConsoleLineWriter('LOG')
-
-        self.connect(self.inputs['IN'], tap.inputs['IN'])
-        self.connect(tap.outputs['OUT'][0], self.outputs['OUT'])
-        self.connect(tap.outputs['OUT'][1], log.inputs['IN'])
+# class LogTap(Graph):
+#     """
+#     Taps an input stream by receiving inputs from IN, sending them
+#     to the console log, and forwarding them to OUT.
+#     """
+#     def initialize(self):
+#         self.inputs.add_ports(InputPort('IN'))
+#         self.outputs.add_ports(OutputPort('OUT'))
+#
+#         tap = Split('TAP')
+#         log = ConsoleLineWriter('LOG')
+#
+#         self.connect(self.inputs['IN'], tap.inputs['IN'])
+#         self.connect(tap.outputs['OUT'][0], self.outputs['OUT'])
+#         self.connect(tap.outputs['OUT'][1], log.inputs['IN'])
 
 
 class RandomNumberGenerator(Component):

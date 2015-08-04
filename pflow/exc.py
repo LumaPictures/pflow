@@ -41,7 +41,3 @@ class PortReceiveTimeout(PortError):
     """
     Timed out while waiting for a receive() on an InputPort.
     """
-
-
-class RuntimeError(Exception):
-    pass

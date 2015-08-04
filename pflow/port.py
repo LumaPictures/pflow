@@ -81,7 +81,7 @@ class Port(BasePort):
     __metaclass__ = ABCMeta
 
     def __init__(self, name, description=None, optional=True,
-                 allowed_types=None, default=None, max_queue_size=None):
+                 allowed_types=None, default=None):
         """
         :param name: the unique (per-component) name of this port.
         :param description: an optional description of what this port is used for.
@@ -117,10 +117,6 @@ class Port(BasePort):
             self.allowed_types = set()
 
         self.default = default
-
-        # If queue_max_size is set, it limits the queue size so that a component can apply backpressure
-        # by causing the adjacent component to block on send/receive when the queue is full.
-        self.max_queue_size = max_queue_size
 
         self.component = None  # Owning component
         self._is_open = True
@@ -187,9 +183,14 @@ class InputPort(Port):
     Port that is defined on the input side of a component.
     Leads from either an OutputPort of an upstream component or an initial Packet.
     """
-    def __init__(self, name='IN', **kwargs):
+    def __init__(self, name='IN', max_queue_size=None, **kwargs):
         super(InputPort, self).__init__(name, **kwargs)
+
         self.source_port = None
+
+        # If max_queue_size is set, it limits the queue size so that a component can apply backpressure
+        # by causing the upstream component to block on send_packet() when the queue is full.
+        self.max_queue_size = max_queue_size
 
     def is_connected(self):
         return (self.component is not None and
@@ -209,8 +210,7 @@ class InputPort(Port):
         else:
             self._check_ready_state()
 
-        runtime = self.component.runtime
-        packet = runtime.receive_port(self.component, self.name)
+        packet = self.component.executor.receive_port(self.component, self.name)
 
         return packet
 
@@ -225,7 +225,7 @@ class InputPort(Port):
 
     def close(self):
         if self.is_open():
-            self.component.runtime.close_input_port(self.component, self.name)
+            self.component.executor.close_input_port(self.component, self.name)
 
         super(InputPort, self).close()
 
@@ -301,8 +301,8 @@ class OutputPort(Port):
         if packet is EndOfStream:
             raise ValueError('You can not send an EndOfStream downstream!')
 
-        runtime = self.component.runtime
-        runtime.send_port(self.component, self.name, packet)
+        executor = self.component.executor
+        executor.send_port(self.component, self.name, packet)
 
     def send(self, value):
         packet = self.component.create_packet(value)
@@ -329,7 +329,7 @@ class OutputPort(Port):
             raise ValueError('There are %d open brackets on %s' % self)
 
         if self.is_open():
-            self.component.runtime.close_output_port(self.component, self.name)
+            self.component.executor.close_output_port(self.component, self.name)
 
         super(OutputPort, self).close()
 

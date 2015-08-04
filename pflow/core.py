@@ -1,6 +1,7 @@
 from abc import ABCMeta, abstractmethod
 import logging
 import json
+import inspect
 
 try:
     import queue  # 3.x
@@ -12,7 +13,6 @@ from enum import Enum
 from . import utils, exc
 from . import parsefbp
 from .port import Packet, PortRegistry, InputPort, OutputPort, ArrayInputPort, ArrayOutputPort
-from .executors.base import RuntimeTarget
 
 log = logging.getLogger(__name__)
 
@@ -31,6 +31,9 @@ class ComponentState(Enum):
     # Component is waiting to receive data on its input port.
     SUSP_RECV = 'SUSP_RECV'
 
+    # Component will terminate if no more send/recv calls are made and its run() method exits.
+    DORMANT = 'DORMANT'
+
     # Component has successfully terminated execution (final state).
     TERMINATED = 'TERMINATED'
 
@@ -38,7 +41,7 @@ class ComponentState(Enum):
     ERROR = 'ERROR'
 
 
-class Component(RuntimeTarget):
+class Component(object):
     """
     Component instances are "process" nodes in a flow-based digraph.
 
@@ -57,15 +60,23 @@ class Component(RuntimeTarget):
 
         (ComponentState.ACTIVE, ComponentState.SUSP_SEND),
         (ComponentState.ACTIVE, ComponentState.SUSP_RECV),
+        (ComponentState.ACTIVE, ComponentState.DORMANT),
         (ComponentState.ACTIVE, ComponentState.TERMINATED),
         (ComponentState.ACTIVE, ComponentState.ERROR),
 
         (ComponentState.SUSP_SEND, ComponentState.ACTIVE),
+        (ComponentState.SUSP_SEND, ComponentState.DORMANT),
         (ComponentState.SUSP_SEND, ComponentState.ERROR),
 
         (ComponentState.SUSP_RECV, ComponentState.ACTIVE),
+        (ComponentState.SUSP_RECV, ComponentState.DORMANT),
         (ComponentState.SUSP_RECV, ComponentState.ERROR),
-        (ComponentState.SUSP_RECV, ComponentState.TERMINATED)
+        (ComponentState.SUSP_RECV, ComponentState.TERMINATED),
+
+        (ComponentState.DORMANT, ComponentState.ACTIVE),
+        (ComponentState.DORMANT, ComponentState.SUSP_SEND),
+        (ComponentState.DORMANT, ComponentState.SUSP_RECV),
+        (ComponentState.DORMANT, ComponentState.TERMINATED)
     ])
 
     def __init__(self, name):
@@ -81,6 +92,7 @@ class Component(RuntimeTarget):
 
         self.initialize()
 
+        self.executor = None
         self.stack = queue.LifoQueue()  # Used for simple bracket packets
         self.owned_packet_count = 0
         self._state = ComponentState.NOT_STARTED
@@ -106,8 +118,13 @@ class Component(RuntimeTarget):
 
         self._state = new_state
 
-        self.log.debug('Transitioned from %s -> %s' %
-                       (old_state.value, new_state.value))
+        # Get caller
+        curr_frame = inspect.currentframe()
+        caller_frame = inspect.getouterframes(curr_frame, 2)
+        caller_name = caller_frame[1][3]
+
+        self.log.debug('Transitioned from %s -> %s (caller: %s)' %
+                       (old_state.value, new_state.value, caller_name))
 
         # TODO: Fire a transition event
 
@@ -188,13 +205,13 @@ class Component(RuntimeTarget):
         else:
             self.state = ComponentState.TERMINATED
 
-        self.runtime.terminate_thread(self)
+        self.executor.terminate_thread(self)
 
     def suspend(self, seconds=None):
         """
         Yield execution to scheduler.
         """
-        self.runtime.suspend_thread(seconds)
+        self.executor.suspend_thread(seconds)
 
     def __str__(self):
         return '%s(%s)' % (self.__class__.__name__, self.name)

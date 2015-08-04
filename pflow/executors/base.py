@@ -1,7 +1,8 @@
 import json
 from abc import ABCMeta, abstractmethod
 
-from ..exc import GraphExecutorError
+from ..core import ComponentState
+from .. import exc
 
 
 class GraphExecutor(object):
@@ -22,9 +23,9 @@ class GraphExecutor(object):
         self.log = logging.getLogger('%s.%s' % (self.__class__.__module__,
                                                 self.__class__.__name__))
 
-        # Wire up runtime dependency to all graph components
+        # Wire up executor to all graph components
         for component in graph.components:
-            component.runtime = self
+            component.executor = self
 
     def _create_component_runner(self, component):
         """
@@ -33,33 +34,53 @@ class GraphExecutor(object):
         :param component: the component to create the runner for.
         :return: loop function that gets executed by the thread.
         """
-        from ..core import ComponentState
-
         def component_loop(in_queues, out_queues):
             component._in_queues = in_queues
             component._out_queues = out_queues
 
             try:
-                while not component.is_terminated:
+                # Component should always be in a NOT_STARTED state when first running!
+                if component.state != ComponentState.NOT_STARTED:
+                    raise exc.ComponentStateError('%s state is %s, but expected NOT_STARTED' % (component,
+                                                                                                component.state))
 
-                    # Activate component
-                    component.state = ComponentState.ACTIVE
+                component.state = ComponentState.ACTIVE
+                while not component.is_terminated:
 
                     # Run the component
                     component.run()
 
-                    if self.graph.is_upstream_terminated(component) and not component.is_suspended:
-                        # Terminate when all upstream components have terminated and there's no more data to process.
-                        self.log.debug('%s will be terminated because of dead upstream (run loop)' % component)
-                        component.terminate()
+                    if self.graph.is_upstream_terminated(component):
+                        if component.state == ComponentState.DORMANT:
+                            # Terminate when all upstream components have terminated and there's no more data to process.
+                            self.log.debug('%s will be marked TERMINATED because it is DORMANT '
+                                           'with a dead upstream ' % component)
+                            component.terminate()
+                        elif not (component.is_suspended or component.is_terminated):
+                            self.log.debug('%s will be marked as DORMANT because is not waiting for data' % component)
+                            component.state = ComponentState.DORMANT
                     else:
                         # Suspend execution until there's more data to process.
                         component.suspend()
+                        if not component.is_terminated:
+                            component.state = ComponentState.ACTIVE
 
             finally:
                 component.destroy()
 
         return component_loop
+
+    def _reset_components(self):
+        for component in self.graph.components:
+            for inport in component.inputs:
+                self.close_input_port(component, inport.name)
+
+            for outport in component.outputs:
+                self.close_output_port(component, outport.name)
+
+            component._state = ComponentState.NOT_STARTED
+            component.executor = None
+            # TODO: component.stack
 
     @abstractmethod
     def is_running(self):
@@ -82,6 +103,8 @@ class GraphExecutor(object):
         self.log.debug('Stopping graph execution...')
         for component in self.graph.components:
             component.terminate()
+
+        self._reset_components()
 
     @abstractmethod
     def send_port(self, component, port_name, packet):
@@ -139,28 +162,6 @@ class GraphExecutor(object):
         Suspend execution of this thread until the next packet arrives.
         """
         pass
-
-
-class RuntimeTarget(object):
-    """
-    Class that can have a Runtime injected into it after graph construction.
-    Runtimes implement scheduling behavior.
-    """
-    __metaclass__ = ABCMeta
-
-    @property
-    def runtime(self):
-        if not hasattr(self, '_runtime'):
-            raise ValueError('You need to run this graph through a Runtime.')
-
-        return self._runtime
-
-    @runtime.setter
-    def runtime(self, runtime):
-        if hasattr(self, '_runtime') and runtime != self._runtime:
-            raise ValueError('Runtime can not be changed. Please re-create the graph.')
-
-        self._runtime = runtime
 
 
 class PacketSerializer(object):

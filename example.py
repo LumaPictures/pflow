@@ -25,9 +25,11 @@ class Simple(Component):
             print "open: %s" % self.inputs['in'].is_open()
 
             value = self.inputs['in'].receive()
-            if value is not EndOfStream:
-                print "value: %s" % value
-                print "-"
+            if value is EndOfStream:
+                break
+
+            print "value: %s" % value
+            print "-"
 
 
 class SimpleGraph(Graph):
@@ -42,8 +44,7 @@ class HypeMachinePopularTracksReader(Component):
                               InputPort('COUNT',
                                         optional=True,
                                         allowed_types=[int]))
-        self.outputs.add_ports(OutputPort('OUT',
-                                          max_queue_size=1))  # causes each send() to suspend
+        self.outputs.add_ports(OutputPort('OUT'))
 
     def run(self):
         import requests
@@ -66,7 +67,8 @@ class HypeMachinePopularTracksReader(Component):
 
 class HypeMachineTrackStringifier(Component):
     def initialize(self):
-        self.inputs.add_ports(InputPort('IN'))
+        self.inputs.add_ports(InputPort('IN', max_queue_size=1))  # Causes the upstream component to block in SUSP_SEND
+                                                                  # until this component can process the next packet.
         self.outputs.add_ports(OutputPort('OUT'))
 
     def run(self):
@@ -175,10 +177,12 @@ def main():
 
     #fbp_graph = Graph('FBP_1')
     #fbp_graph.load_fbp_file('./example/awesome.fbp')
+    sag = SuperAwesomeDemoGraph('AWESOME_1')
 
     test_graphs = [
         SimpleGraph('SIMPLE'),
-        SuperAwesomeDemoGraph('AWESOME_1'),
+        sag,
+        sag,
         PopularMusicGraph('MUSIC_1'),
         #fbp_graph,
         #ProcessSpawningLogger('PROCSPAWN_1')
