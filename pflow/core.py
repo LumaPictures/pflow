@@ -75,8 +75,9 @@ class Component(RuntimeTarget):
         self.name = name
         self.inputs = PortRegistry(self, InputPort, ArrayInputPort)
         self.outputs = PortRegistry(self, OutputPort, ArrayOutputPort)
-        self.log = logging.getLogger('%s(%s)' % (self.__class__.__name__,
-                                                 self.name))
+        self.log = logging.getLogger('%s.%s(%s)' % (self.__class__.__module__,
+                                                    self.__class__.__name__,
+                                                    self.name))
 
         self.initialize()
 

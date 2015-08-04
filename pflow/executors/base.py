@@ -19,7 +19,8 @@ class GraphExecutor(object):
             raise ValueError('graph must be a Graph object')
 
         self.graph = graph
-        self.log = logging.getLogger(self.__class__.__name__)
+        self.log = logging.getLogger('%s.%s' % (self.__class__.__module__,
+                                                self.__class__.__name__))
 
         # Wire up runtime dependency to all graph components
         for component in graph.components:

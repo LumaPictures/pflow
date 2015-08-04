@@ -24,7 +24,8 @@ class Runtime(object):
     Manages components, graphs, and executors.
     """
     def __init__(self):
-        self.log = logging.getLogger(self.__class__.__name__)
+        self.log = logging.getLogger('%s.%s' % (self.__class__.__module__,
+                                                self.__class__.__name__))
 
         self._components = {}  # Component metadata, keyed by component name
         self._graphs = {}  # Graph instances, keyed by graph ID
@@ -243,7 +244,7 @@ class Runtime(object):
         """
         Set the inital packet for a component inport.
         """
-        self.log.debug('Graph %s: Setting IIP to "%s" on port %s' % (graph_id, data, src))
+        self.log.info('Graph %s: Setting IIP to "%s" on port %s' % (graph_id, data, src))
 
         graph = self._graphs[graph_id]
 
@@ -277,7 +278,8 @@ class RuntimeApplication(geventwebsocket.WebSocketApplication):
     def __init__(self, ws):
         super(RuntimeApplication, self).__init__(self)
 
-        self.log = logging.getLogger(self.__class__.__name__)
+        self.log = logging.getLogger('%s.%s' % (self.__class__.__module__,
+                                                self.__class__.__name__))
 
         # TODO: Use a factory for creating this object, so that a Registry can be instantiated outside the WebSocketApplication constructor.
         self.runtime = Runtime()
@@ -454,8 +456,10 @@ class FlowhubRegistry(RuntimeRegistry):
     It's necessary to use this if you want to manage your graph in either FlowHub or NoFlo-UI.
     """
     def __init__(self):
+        self.log = logging.getLogger('%s.%s' % (self.__class__.__module__,
+                                                self.__class__.__name__))
+
         self._endpoint = 'http://api.flowhub.io'
-        self.log = logging.getLogger(self.__class__.__name__)
 
     def register_runtime(self, runtime_id, user_id, label, address):
         payload = {
@@ -486,6 +490,9 @@ class FlowhubRegistry(RuntimeRegistry):
 if __name__ == '__main__':
     logging.basicConfig(level=logging.DEBUG)
     logging.getLogger('requests').setLevel(logging.WARN)
+    logging.getLogger('pflow.core').setLevel(logging.INFO)
+    logging.getLogger('pflow.components').setLevel(logging.INFO)
+    logging.getLogger('pflow.executors').setLevel(logging.INFO)
 
     #ws_host = socket.gethostname()
     #ws_port = utils.get_free_tcp_port()
