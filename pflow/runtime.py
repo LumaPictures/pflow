@@ -1,4 +1,6 @@
 #!/usr/bin/env python
+from .executors.single_process import SingleProcessGraphExecutor
+
 import os
 import uuid
 import logging
@@ -136,7 +138,6 @@ class Runtime(object):
         Execute a graph.
         """
         self.log.debug('Graph %s: Starting execution' % graph_id)
-        from .executors.single_process import SingleProcessGraphExecutor
 
         graph = self._graphs[graph_id]
 
@@ -156,19 +157,23 @@ class Runtime(object):
         """
         Stop executing a graph.
         """
-        self.log.debug('Graph %s: Stopping execution')
+        self.log.debug('Graph %s: Stopping execution' % graph_id)
         if graph_id not in self._executors:
             raise ValueError('Invalid graph: %s' % graph_id)
 
         executor = self._executors[graph_id]
-        # TODO
-        raise NotImplementedError('can not stop graph execution yet')
+        executor.stop()
 
     def _create_or_get_graph(self, graph_id):
         if graph_id not in self._graphs:
             self._graphs[graph_id] = core.Graph(graph_id)
 
         return self._graphs[graph_id]
+
+    def _find_component_by_name(self, graph, component_name):
+        for component in graph.components:
+            if component.name == component_name:
+                return component
 
     def new_graph(self, graph_id):
         """
@@ -205,42 +210,64 @@ class Runtime(object):
         Connect ports between components.
         """
         self.log.debug('Graph %s: Connecting ports: %s -> %s' % (graph_id, src, tgt))
-        graph = self._create_or_get_graph(graph_id)
-        # TODO: Connect ports
-        # connections = self._graphs[graph_id]['connections']
-        # connections.append((src, tgt))
-        pass
+
+        graph = self._graphs[graph_id]
+
+        source_component = self._find_component_by_name(graph, src['node'])
+        source_port = source_component.outputs[src['port']]
+
+        target_component = self._find_component_by_name(graph, tgt['node'])
+        target_port = target_component.inputs[tgt['port']]
+
+        graph.connect(source_port, target_port)
 
     def remove_edge(self, graph_id, src, tgt):
         """
         Disconnect ports between components.
         """
         self.log.debug('Graph %s: Disconnecting ports: %s -> %s' % (graph_id, src, tgt))
-        graph = self._create_or_get_graph(graph_id)
-        # TODO: Disconnect ports
-        # connections = self._graphs[graph_id]['connections']
-        # connections = filter(lambda conn: conn[0] != src and conn[1] != tgt, connections)
-        pass
+
+        graph = self._graphs[graph_id]
+
+        source_component = self._find_component_by_name(graph, src['node'])
+        source_port = source_component.outputs[src['port']]
+        if source_port.is_connected():
+            graph.disconnect(source_port)
+
+        target_component = self._find_component_by_name(graph, tgt['node'])
+        target_port = target_component.inputs[tgt['port']]
+        if target_port.is_connected():
+            graph.disconnect(target_port)
 
     def add_iip(self, graph_id, src, data):
         """
         Set the inital packet for a component inport.
         """
-        graph = self._create_or_get_graph(graph_id)
-        # TODO: component.set_initial_packet()
-        # iips = self._graphs[graph_id]['iips']
-        # iips.append((src, data))
-        pass
+        self.log.debug('Graph %s: Setting IIP to "%s" on port %s' % (graph_id, data, src))
+
+        graph = self._graphs[graph_id]
+
+        target_component = self._find_component_by_name(graph, src['node'])
+        target_port = target_component.inputs[src['port']]
+        if target_port.is_connected():
+            graph.disconnect(target_port)
+
+        graph.set_initial_packet(target_port, data)
 
     def remove_iip(self, graph_id, src):
         """
         Remove the initial packet for a component inport.
         """
-        graph = self._create_or_get_graph(graph_id)
-        # TODO: graph.remove_node(iip_generator_node_on_src_port)
-        # iips = self._graphs[graph_id]['iips']
-        # iips = filter(lambda iip: iip[0] != src, iips)
-        pass
+        self.log.debug('Graph %s: Removing IIP from port %s' % (graph_id, src))
+
+        graph = self._graphs[graph_id]
+
+        target_component = self._find_component_by_name(graph, src['node'])
+        target_port = target_component.inputs[src['port']]
+        if target_port.is_connected():
+            graph.disconnect(target_port)
+
+        graph.unset_initial_packet(target_port)
 
 
 class RuntimeApplication(geventwebsocket.WebSocketApplication):

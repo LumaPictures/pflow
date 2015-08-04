@@ -71,6 +71,17 @@ class GraphExecutor(object):
         """
         pass
 
+    def stop(self):
+        """
+        Stops graph execution.
+        """
+        if not self.is_running():
+            return
+
+        self.log.debug('Stopping graph execution...')
+        for component in self.graph.components:
+            component.terminate()
+
     @abstractmethod
     def send_port(self, component, port_name, packet):
         """

@@ -295,12 +295,26 @@ class Graph(Component):
         if not isinstance(component, Component):
             raise ValueError('component must either be a Component object or the name of a component to remove')
 
+        for outport in component.outputs:
+            self.disconnect(outport)
+
+        for inport in component.inputs:
+            self.disconnect(inport)
+
         self.components.remove(component)
 
     def set_initial_packet(self, port, value):
         iip = InitialPacketGenerator(value)
         self.connect(iip.outputs['OUT'], port)
         return iip
+
+    def unset_initial_packet(self, port):
+        if not isinstance(port, InputPort):
+            raise ValueError('Can only unset_initial_packet() on an InputPort')
+
+        if port.is_connected():
+            iip_gen = port.source_port.component
+            self.remove_component(iip_gen)
 
     def set_port_defaults(self, component):
         """
@@ -336,6 +350,21 @@ class Graph(Component):
         # FIXME: make these private?
         source_output_port.target_port = target_input_port
         target_input_port.source_port = source_output_port
+
+    def disconnect(self, port):
+        """
+        Disconnect component port.
+        Disconnecting an output will also disconnect the input, and vice versa.
+
+        :param port: the port to disconnect (either input or output).
+        """
+        if port.is_connected():
+            if isinstance(port, OutputPort):
+                log.debug('%s disconnected from %s' % (port, port.target_port))
+                port.target_port = None
+            elif isinstance(port, InputPort):
+                log.debug('%s disconnected from %s' % (port, port.source_port))
+                port.source_port = None
 
     @property
     def self_starters(self):

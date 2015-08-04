@@ -85,7 +85,7 @@ class MultiProcessGraphExecutor(GraphExecutor):
 
         # Start all processes
         self.log.debug('Starting %d processes...' % len(self.graph.components))
-        processes = []
+        self._processes = []
         for component in self.graph.components:
             out_edges = filter(lambda edge: edge[0][0] == component.name, edges)
             in_edges  = filter(lambda edge: edge[1][0] == component.name, edges)
@@ -103,12 +103,12 @@ class MultiProcessGraphExecutor(GraphExecutor):
 
             process.daemon = True
             process.start()
-            processes.append(process)
+            self._processes.append(process)
 
         # Wait for all processes to terminate
         # TODO: Close ports on dead upstream processes
         self.log.debug('Waiting for process completion....')
-        for process in processes:
+        for process in self._processes:
             process.join()
 
         self._running = False

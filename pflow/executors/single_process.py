@@ -58,31 +58,31 @@ class SingleProcessGraphExecutor(GraphExecutor):
         self.log.debug('Executing %s' % self.graph)
 
         self._recv_queues = collections.defaultdict(queue.Queue)
-        coroutines = dict([(gevent.spawn(self._create_component_runner(component),
-                                         None,   # in_queues
-                                         None),  # out_queues
-                            component)
-                           for component in self.graph.components])
+        self._coroutines = dict([(gevent.spawn(self._create_component_runner(component),
+                                               None,   # in_queues
+                                               None),  # out_queues
+                                  component)
+                                 for component in self.graph.components])
 
         def thread_error_handler(coroutine):
             """
             Handles component coroutine exceptions that get raised.
             This should terminate execution of all other coroutines.
             """
-            component = coroutines[coroutine]
+            component = self._coroutines[coroutine]
             self.log.error('Component "%s" failed with %s: %s' % (component.name,
                                                                   coroutine.exception.__class__.__name__,
                                                                   coroutine.exception.message))
 
-            for c in coroutines.values():
+            for c in self._coroutines.values():
                 c.terminate(ex=coroutine.exception)
 
         # Wire up error handler (so that exceptions aren't swallowed)
-        for coroutine in coroutines.keys():
+        for coroutine in self._coroutines.keys():
             coroutine.link_exception(thread_error_handler)
 
         # Wait for all coroutines to terminate
-        gevent.wait(coroutines.keys())
+        gevent.wait(self._coroutines.keys())
 
         self._running = False
         self.log.debug('Finished graph execution')
