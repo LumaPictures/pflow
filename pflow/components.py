@@ -4,7 +4,7 @@ from .core import Graph, Component, ComponentState, \
     InputPort, OutputPort, \
     ArrayInputPort, ArrayOutputPort
 
-from .port import EndOfStream
+from .port import EndOfStream, StartBracket, EndBracket
 
 
 class Repeat(Component):
@@ -196,11 +196,22 @@ class ConsoleLineWriter(Component):
     """
     def initialize(self):
         self.inputs.add_ports(InputPort('IN'))
+        self.outputs.add_ports(OutputPort('OUT'))
 
     def run(self):
-        message = self.inputs['IN'].receive()
-        if message is not EndOfStream:
-            print message
+        depth = 0
+        packet = self.inputs['IN'].receive_packet()
+        if packet is not EndOfStream:
+            if isinstance(packet, StartBracket):
+                print "[start group]"
+                depth += 1
+            elif isinstance(packet, EndBracket):
+                print "[end group]"
+                depth -= 1
+            else:
+                print ('-' * depth), packet.value
+            self.outputs['OUT'].send_packet(packet)
+            self.suspend()
 
 
 # class LogTap(Graph):
@@ -262,3 +273,4 @@ class RandomNumberGenerator(Component):
                 if i >= limit_value:
                     self.terminate()
                     break
+
