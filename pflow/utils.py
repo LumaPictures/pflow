@@ -40,3 +40,53 @@ def pluck(seq, key):
             vals.append(getattr(item, key))
 
     return vals
+
+
+def init_logger(default_level=None, filename=None, logger_levels=None):
+    import logging
+
+    console_format = '%(processName)-20s | %(levelname)-5s | %(name)s: %(message)s'
+    file_format = '%(asctime)s | %(processName)-20s | %(levelname)-5s | %(name)s: %(message)s'
+
+    # File logger
+    if default_level is None:
+        default_level = logging.DEBUG
+
+    logging_args = {
+        'level': default_level
+    }
+    if filename is not None:
+        logging_args.update({
+            'filename': filename,
+            'filemode': 'w',
+            'format': file_format
+        })
+    else:
+        logging_args.update({
+            'format': console_format
+        })
+
+    logging.basicConfig(**logging_args)
+
+    if filename is not None:
+        # Console logger
+        console = logging.StreamHandler()
+        console.setLevel(logging.INFO)
+        console.setFormatter(logging.Formatter(console_format))
+        logging.getLogger('').addHandler(console)
+
+    # Set verbosity levels
+    if logger_levels is None:
+        logger_levels = {
+            # Reduce verbosity for chatty packages
+            'requests': logging.WARN,
+            'geventwebsocket': logging.INFO,
+            'sh': logging.WARN
+
+            # 'pflow.core': logging.INFO,
+            # 'pflow.components': logging.INFO,
+            # 'pflow.executors': logging.INFO
+        }
+
+    for logger_name, logger_level in logger_levels.items():
+        logging.getLogger(logger_name).setLevel(logger_level)

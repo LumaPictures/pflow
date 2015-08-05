@@ -526,7 +526,7 @@ def main():
                       help='FlowHub user ID (get this from NoFlo-UI)')
     argp.add_argument('-r', '--runtime-id', metavar='UUID',
                       help='FlowHub unique runtime ID (generated if none specified)')
-    argp.add_argument('-l', '--label', required=True, metavar='LABEL_NAME',
+    argp.add_argument('--label', required=True, metavar='LABEL_NAME',
                       help="Name of this runtime (this is displayed in the UI's list of runtimes)")
 
     argp.add_argument('--host', default=defaults['host'], metavar='HOSTNAME',
@@ -534,6 +534,8 @@ def main():
     argp.add_argument('--port', type=int, default=3569, metavar='PORT',
                       help='Listen port for websocket (default: %(port)d)' % defaults)
 
+    argp.add_argument('--log-file', metavar='FILE_PATH',
+                      help='File to send log output to (default: none)')
     argp.add_argument('-v', '--verbose', action='store_true',
                       help='Enable verbose logging')
     # TODO: add arg for executor type (multiprocess, singleprocess, distributed)
@@ -541,19 +543,17 @@ def main():
     args = argp.parse_args()
 
     # Configure logging
-    logging.basicConfig(level=logging.DEBUG if args.verbose else logging.INFO)
-    if not args.verbose:
-        logger_levels = {
-            'requests': logging.WARN,
-            'geventwebsocket': logging.INFO,
-            'sh': logging.WARN,
+    utils.init_logger(filename=args.log_file,
+                      default_level=(logging.DEBUG if args.verbose else logging.INFO),
+                      logger_levels={
+                          'requests': logging.WARN,
+                          'geventwebsocket': logging.INFO,
+                          'sh': logging.WARN,
 
-            'pflow.core': logging.INFO,
-            'pflow.components': logging.INFO,
-            'pflow.executors': logging.INFO
-        }
-        for logger_name, logger_level in logger_levels.items():
-            logging.getLogger(logger_name).setLevel(logger_level)
+                          'pflow.core': logging.INFO,
+                          'pflow.components': logging.INFO,
+                          'pflow.executors': logging.INFO
+                      })
 
     def runtime_task():
         """

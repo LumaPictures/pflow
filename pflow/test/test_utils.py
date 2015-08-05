@@ -5,20 +5,19 @@ except ImportError:
     import mock
 
 
-class InputPortTest(unittest.TestCase):
+class UtilsTest(unittest.TestCase):
     @unittest.skip('unimplemented')
-    def test_foo(self):
+    def test_get_free_tcp_port(self):
         pass
 
-
-class OutputPortTest(unittest.TestCase):
     @unittest.skip('unimplemented')
-    def test_foo(self):
+    def test_random_id(self):
         pass
 
-
-class PortRegistryTest(unittest.TestCase):
     @unittest.skip('unimplemented')
-    def test_foo(self):
+    def test_pluck(self):
         pass
 
+    @unittest.skip('unimplemented')
+    def test_init_logger(self):
+        pass
