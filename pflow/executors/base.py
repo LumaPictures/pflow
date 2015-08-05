@@ -60,12 +60,20 @@ class GraphExecutor(object):
         return component_loop
 
     def _reset_components(self):
-        for component in self.graph.components:
-            for inport in component.inputs:
-                self.close_input_port(component, inport.name)
+        def reset_ports(ports):
+            for port in ports:
+                if port.is_connected():
 
-            for outport in component.outputs:
-                self.close_output_port(component, outport.name)
+                    # Close port (which alls calls cleanup code)
+                    if port.is_open():
+                        port.close()
+
+                    # Re-open port so that it can be used next time.
+                    port.open()
+
+        for component in self.graph.components:
+            reset_ports(component.inputs)
+            reset_ports(component.outputs)
 
             component._state = ComponentState.NOT_STARTED
             component.executor = None
