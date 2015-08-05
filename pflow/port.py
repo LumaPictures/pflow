@@ -227,7 +227,7 @@ class InputPort(Port):
             return packet
         else:
             value = packet.value
-            self.component.drop(packet)
+            self.component.drop_packet(packet)
             return value
 
     def close(self):

@@ -43,27 +43,32 @@ class GraphExecutor(object):
                 if component.state != ComponentState.NOT_STARTED:
                     raise exc.ComponentStateError('%s state is %s, but expected NOT_STARTED' % (component,
                                                                                                 component.state))
-
                 component.state = ComponentState.ACTIVE
                 while not component.is_terminated:
+
+                    # is_dormant = (component.state == ComponentState.DORMANT)
+                    # has_waiting_downstream = any([c.state == ComponentState.SUSP_RECV
+                    #                               for c in self.graph.get_downstream(component)])
 
                     # Run the component
                     component.run()
 
-                    if self.graph.is_upstream_terminated(component):
-                        if component.state == ComponentState.DORMANT:
-                            # Terminate when all upstream components have terminated and there's no more data to process.
-                            self.log.debug('%s will be marked TERMINATED because it is DORMANT '
-                                           'with a dead upstream ' % component)
-                            component.terminate()
-                        elif not (component.is_suspended or component.is_terminated):
-                            self.log.debug('%s will be marked as DORMANT because is not waiting for data' % component)
-                            component.state = ComponentState.DORMANT
+                    if component.is_terminated:
+                        # Component has been TERMINATED already.
+                        break
+                    elif component.state == ComponentState.DORMANT:
+                        # Component has remained in DORMANT state, and should be TERMINATED.
+                        component.terminate()
+                        break
+                    elif (self.graph.is_upstream_terminated(component) and  # Dead parents
+                          not component.is_suspended):  # Not waiting on send/recv
+                        # Component isn't waiting on any data, has dead parents, and has nothing downstream waiting on
+                        # it, so it should be TERMINATED.
+                        component.terminate()
+                        break
                     else:
                         # Suspend execution until there's more data to process.
                         component.suspend()
-                        if not component.is_terminated:
-                            component.state = ComponentState.ACTIVE
 
             finally:
                 component.destroy()
@@ -80,6 +85,12 @@ class GraphExecutor(object):
 
             component._state = ComponentState.NOT_STARTED
             component.executor = None
+
+            if hasattr(component, '_in_queues'):
+                del component._in_queues
+            if hasattr(component, '_out_queues'):
+                del component._out_queues
+
             # TODO: component.stack
 
     @abstractmethod

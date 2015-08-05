@@ -22,6 +22,7 @@ from ..exc import GraphExecutorError
 from ..port import Packet
 
 
+# TODO: update this, since it has fallen behind single_proces updates
 class MultiProcessGraphExecutor(GraphExecutor):
     """
     Executes a graph in parallel using multiple processes, where each component is run in

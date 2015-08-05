@@ -37,7 +37,7 @@ import gevent
 
 from .base import GraphExecutor
 from ..core import ComponentState
-from ..port import Port, EndOfStream
+from ..port import Port, InputPort, EndOfStream
 from .. import exc
 
 
@@ -52,6 +52,7 @@ class SingleProcessGraphExecutor(GraphExecutor):
         super(SingleProcessGraphExecutor, self).__init__(graph)
         self._recv_queues = None
         self._running = False
+        self._coroutines = None
 
     def execute(self):
         self._running = True
@@ -96,7 +97,12 @@ class SingleProcessGraphExecutor(GraphExecutor):
             raise ValueError('port must be a Port')
 
         if port.id not in self._recv_queues:
-            self._recv_queues[port.id] = queue.Queue(maxsize=port.max_queue_size)
+            if isinstance(port, InputPort):
+                maxsize = port.max_queue_size
+            else:
+                maxsize = None
+
+            self._recv_queues[port.id] = queue.Queue(maxsize=maxsize)
 
         return self._recv_queues[port.id]
 
@@ -114,8 +120,7 @@ class SingleProcessGraphExecutor(GraphExecutor):
         q.put(packet)
         component.suspend()
 
-        if component.state == ComponentState.SUSP_SEND:
-            component.state = last_state
+        component.state = last_state
 
     def receive_port(self, component, port_name, timeout=None):
         # TODO: implement timeout
@@ -128,14 +133,21 @@ class SingleProcessGraphExecutor(GraphExecutor):
 
         q = self._get_or_create_queue(source_port)
 
+        last_state = component.state
         component.state = ComponentState.SUSP_RECV
+
+        self.log.debug('%s is waiting for data on %s' % (component, source_port))
         while not component.is_terminated:
             try:
                 packet = q.get(block=False)
                 self.log.debug('%s received packet on %s: %s' % (component, source_port, packet))
-                component.state = ComponentState.ACTIVE
+                if last_state != ComponentState.DORMANT:
+                    component.state = last_state
+                else:
+                    component.state = ComponentState.ACTIVE
                 return packet
             except queue.Empty:
+                # self.log.debug('No data on %s' % source_port)
                 if self.graph.is_upstream_terminated(component):
                     # No more data left to receive_packet and upstream has terminated.
                     component.state = ComponentState.DORMANT
@@ -146,6 +158,7 @@ class SingleProcessGraphExecutor(GraphExecutor):
                     return EndOfStream
                 else:
                     # self.log.debug('%s is waiting for packet on %s' % (component, source_port))
+                    component.state = ComponentState.SUSP_RECV
                     component.suspend()
 
     def close_input_port(self, component, port_name):

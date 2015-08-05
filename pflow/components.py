@@ -18,6 +18,7 @@ class Repeat(Component):
     def run(self):
         packet = self.inputs['IN'].receive_packet()
         if packet is not EndOfStream:
+            self.log.debug('Repeating: %s' % packet)
             self.outputs['OUT'].send_packet(packet)
 
 
@@ -33,7 +34,7 @@ class Drop(Component):
     def run(self):
         packet = self.inputs['IN'].receive_packet()
         if packet is not EndOfStream:
-            self.drop(packet)
+            self.drop_packet(packet)
 
 
 class Sleep(Component):
@@ -117,7 +118,7 @@ class RegexFilter(Component):
                 self.outputs['OUT'].send_packet(packet)
             else:
                 self.log.debug('Dropped: "%s"' % packet.value)
-                self.drop(packet)
+                self.drop_packet(packet)
 
 
 # class Concat(Component):
@@ -186,6 +187,9 @@ class FileTailReader(Component):
             self.log.debug('Tailed line: %s' % stripped_line)
 
             self.outputs['OUT'].send(stripped_line)
+
+            if self.is_terminated:
+                break
 
 
 class ConsoleLineWriter(Component):
@@ -259,18 +263,21 @@ class RandomNumberGenerator(Component):
             prng.seed(seed_value)
 
         limit_value = self.inputs['LIMIT'].receive()
+        if limit_value is EndOfStream:
+            limit_value = None
 
-        i = 0
-        while True:
-            random_value = prng.randint(1, 100)
-            self.log.debug('Generated: %d' % random_value)
+        if limit_value is None or limit_value > 0:
+            i = 1
+            while not self.is_terminated:
+                random_value = prng.randint(1, 100)
+                self.log.debug('Generated: %d (%d/%s)' % (random_value, i, limit_value))
 
-            packet = self.create_packet(random_value)
-            self.outputs['OUT'].send_packet(packet)
+                packet = self.create_packet(random_value)
+                self.outputs['OUT'].send_packet(packet)
 
-            if limit_value is not EndOfStream:
+                if limit_value is not None:
+                    if i >= limit_value:
+                        self.terminate()
+                        break
+
                 i += 1
-                if i >= limit_value:
-                    self.terminate()
-                    break
-

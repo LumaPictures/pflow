@@ -31,7 +31,7 @@ class ComponentState(Enum):
     # Component is waiting to receive data on its input port.
     SUSP_RECV = 'SUSP_RECV'
 
-    # Component will terminate if no more send/recv calls are made and its run() method exits.
+    # Component will terminate when its run() method returns.
     DORMANT = 'DORMANT'
 
     # Component has successfully terminated execution (final state).
@@ -56,7 +56,6 @@ class Component(object):
     # Please keep this list of edges in sync with the graphml and README.md docs!
     _valid_transitions = frozenset([
         (ComponentState.NOT_STARTED, ComponentState.ACTIVE),
-        (ComponentState.NOT_STARTED, ComponentState.TERMINATED),
 
         (ComponentState.ACTIVE, ComponentState.SUSP_SEND),
         (ComponentState.ACTIVE, ComponentState.SUSP_RECV),
@@ -76,6 +75,7 @@ class Component(object):
         (ComponentState.DORMANT, ComponentState.ACTIVE),
         (ComponentState.DORMANT, ComponentState.SUSP_SEND),
         (ComponentState.DORMANT, ComponentState.SUSP_RECV),
+        (ComponentState.DORMANT, ComponentState.ERROR),
         (ComponentState.DORMANT, ComponentState.TERMINATED)
     ])
 
@@ -118,13 +118,22 @@ class Component(object):
 
         self._state = new_state
 
-        # Get caller
-        curr_frame = inspect.currentframe()
-        caller_frame = inspect.getouterframes(curr_frame, 2)
-        caller_name = caller_frame[1][3]
+        self.log.debug('State transitioned from %s -> %s' % (old_state.value, new_state.value))
 
-        self.log.debug('Transitioned from %s -> %s (caller: %s)' %
-                       (old_state.value, new_state.value, caller_name))
+        # If supported by interpreter, show the caller to this property method to determine
+        # where the state was changed from.
+        curr_frame = inspect.currentframe()
+        if curr_frame is not None:
+            # Python interpreter has stack support.
+            frame_limit = 3
+            caller_frames = inspect.getouterframes(curr_frame, 2)[1:frame_limit + 1]
+            if len(caller_frames) > 1:
+                # (frame, filename, lineno, function, code_context, index)
+                indent = '\t' * 4
+                caller_stack = ('\n' + indent).join(['%s() in %s:%d' % (fr[3], fr[1], fr[2])
+                                                     for fr in caller_frames])
+                self.log.debug('State was changed by (last %d frames):\n%s%s' %
+                               (frame_limit, indent, caller_stack))
 
         # TODO: Fire a transition event
 
@@ -162,7 +171,7 @@ class Component(object):
         self.owned_packet_count += 1
         return packet
 
-    def drop(self, packet):
+    def drop_packet(self, packet):
         """
         Drop a Packet.
         """
@@ -283,8 +292,7 @@ class Graph(Component):
         :param component: the component to check.
         :return: whether or not the upstream components have been terminated.
         """
-        dead_parents = all([c.is_terminated for c in self.get_upstream(component)])
-        return dead_parents
+        return all([c.is_terminated for c in self.get_upstream(component)])
 
     def add_component(self, component):
         if not isinstance(component, Component):
@@ -489,17 +497,18 @@ class Graph(Component):
                         continue
 
                     for output in component.outputs:
-                        next_components.add(output.target_port.component)
+                        if output.is_connected():
+                            next_components.add(output.target_port.component)
 
-                        edge_attribs = {
-                            'label': '%s -> %s' % (output.name,
-                                                   output.target_port.name),
-                            'description': (output.description or '')
-                        }
+                            edge_attribs = {
+                                'label': '%s -> %s' % (output.name,
+                                                       output.target_port.name),
+                                'description': (output.description or '')
+                            }
 
-                        graph.add_edge(component.name,
-                                       output.target_port.component.name,
-                                       edge_attribs)
+                            graph.add_edge(component.name,
+                                           output.target_port.component.name,
+                                           edge_attribs)
 
                     visited_nodes.add(component)
 
