@@ -18,7 +18,8 @@ install_requires = [
 
     # Component-specific stuff
     'requests',
-    'sh'
+    'sh',
+    'pymongo'
 ]
 
 # Test dependencies

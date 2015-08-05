@@ -37,7 +37,7 @@ def main():
         example_graphs.simple.SimpleGraph('SIMPLE'),
         sag,
         sag,
-        example_graphs.hype_machine.PopularMusicGraph('MUSIC_1'),
+        #example_graphs.popular_music.PopularMusicGraph('MUSIC_1'),
         #example_graphs.process_spawning_logger.ProcessSpawningLogger('PROCSPAWN_1')
     ]
 

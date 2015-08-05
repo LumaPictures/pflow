@@ -4,7 +4,7 @@ from .core import Graph, Component, ComponentState, \
     InputPort, OutputPort, \
     ArrayInputPort, ArrayOutputPort
 
-from .port import EndOfStream, StartBracket, EndBracket
+from .port import EndOfStream, Packet, StartBracket, EndBracket
 
 
 class Repeat(Component):
@@ -72,6 +72,29 @@ class Sleep(Component):
             self.suspend(delay_value)
 
             self.outputs['OUT'].send_packet(packet)
+
+
+class Split(Component):
+    """
+    Splits inputs from IN to OUT_A and OUT_B.
+    """
+    def initialize(self):
+        self.inputs.add('IN')
+        self.outputs.add('OUT_A')
+        self.outputs.add('OUT_B')
+
+    def run(self):
+        packet = self.inputs['IN'].receive_packet()
+        if packet is EndOfStream:
+            self.terminate()
+            return
+
+        a_packet = Packet(packet.value)
+        b_packet = Packet(packet.value)
+        self.drop_packet(packet)
+
+        self.outputs['OUT_A'].send_packet(a_packet)
+        self.outputs['OUT_B'].send_packet(b_packet)
 
 
 # class Split(Component):
@@ -205,8 +228,8 @@ class ConsoleLineWriter(Component):
     This component is a sink.
     """
     def initialize(self):
-        self.inputs.add_ports(InputPort('IN'))
-        self.outputs.add_ports(OutputPort('OUT'))
+        self.inputs.add('IN')
+        self.outputs.add_ports(OutputPort('OUT', optional=True))
 
     def run(self):
         depth = 0
@@ -223,8 +246,62 @@ class ConsoleLineWriter(Component):
             else:
                 print ('-' * depth), packet.value
 
-            self.outputs['OUT'].send_packet(packet)
+            # Forward to output port
+            if self.outputs['OUT'].is_connected():
+                self.outputs['OUT'].send_packet(packet)
+
             self.suspend()
+
+
+class MongoCollectionWriter(Component):
+    """
+    Writes every record from IN to a MongoDB collection.
+    """
+    def initialize(self):
+        self.inputs.add_ports(InputPort('IN'),
+                              InputPort('MONGO_URI',
+                                        allowed_types=[str],
+                                        description='URI of the MongoDB server to connect to'),
+                              InputPort('MONGO_DATABASE',
+                                        allowed_types=[str],
+                                        description='Name of the database to write to'),
+                              InputPort('MONGO_COLLECTION',
+                                        allowed_types=[str],
+                                        description='Name of the collection to write to'),
+                              InputPort('DELETE_COLLECTION',
+                                        allowed_types=[bool],
+                                        optional=True,
+                                        description='If True, delete all documents in collection before writing to it'))
+
+    def run(self):
+        import pymongo
+
+        mongo_uri = self.inputs['MONGO_URI'].receive()
+        self.log.debug('Connecting to mongodb server: %s' % mongo_uri)
+
+        mongo_client = pymongo.MongoClient(host=mongo_uri)
+        self.log.debug('Connected!')
+
+        db_name = self.inputs['MONGO_DATABASE'].receive()
+        collection_name = self.inputs['MONGO_COLLECTION'].receive()
+        collection = mongo_client.get_database(db_name).get_collection(collection_name)
+
+        delete_collection = self.inputs['DELETE_COLLECTION'].receive()
+        if delete_collection is not EndOfStream and delete_collection == True:
+            self.log.warn('Deleting collection: %s' % collection_name)
+            collection.remove()
+
+        while not self.is_terminated:
+            packet = self.inputs['IN'].receive_packet()
+            if packet is EndOfStream:
+                break
+            else:
+                collection.insert_one(packet.value)
+
+        mongo_client.close()
+
+        if not self.is_terminated:
+            self.terminate()
 
 
 # class LogTap(Graph):
