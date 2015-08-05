@@ -19,18 +19,21 @@ internally. FBP is thus naturally component-oriented.
 
 ![Flow-based programming example](./docs/fbp-example.jpg)
 
+
 ## How is this useful?
 
 Drag-and-drop programming!
 
-You can define data flow execution graphs where each process (node) is run in parallel. To define these graphs, you can
-use a GUI like [DrawFBP](https://github.com/jpaulm/drawfbp), [NoFlo UI](https://github.com/noflo/noflo-ui), 
-or [Flowhub](https://flowhub.io/).
+You can define data flow execution graphs where each process (node) is run as a parallel black box. To define these
+graphs, you can use some freely available design tools such as [DrawFBP](https://github.com/jpaulm/drawfbp), 
+[NoFlo UI](https://github.com/noflo/noflo-ui), or [Flowhub](https://flowhub.io/).
 
-## Getting Started
+
+## Quick Start
 
 Run `python setup.py develop` to symlink site-packages to this repo, 
 then run the example graphs with `./example.py`.
+
 
 ## Graphs
 
@@ -39,7 +42,6 @@ then run it using a `GraphExecutor` implementation:
 
     from pflow.executors.single_process import SingleProcessGraphExecutor
     from pflow.components import *
-    from pflow.core import Graph
 
     
     class MyGraph(Graph):
@@ -51,9 +53,10 @@ then run it using a `GraphExecutor` implementation:
             self.set_initial_packet(filter_1.inputs['REGEX'],
                                     r' (USER|DEAD)_PROCESS: ')
     
-            self.connect(tail_1.outputs['OUT'], filter_1.inputs['IN'])
+            self.connect(tail_1.outputs['OUT'], 
+                         filter_1.inputs['IN'])
     
-            self.connect(filter_1.outputs['OUT'].connect,
+            self.connect(filter_1.outputs['OUT'],
                          ConsoleLineWriter('LOG_1').inputs['IN'])    
 
 
@@ -66,6 +69,7 @@ Components are connected by their ports by calling `Graph.connect(source_output_
 Any time `Graph.connect()` is called, the components associated with the ports will automatically get added to the
 graph. If (in the rare case) you have a graph with a single component, you'll need to register it by calling
 `Component.add_component()`.
+
 
 ## Components
 
@@ -91,10 +95,12 @@ and `run()` methods:
                 time.sleep(5)
                 self.outputs['OUT'].send_packet(input_packet)
 
+
 ### Component Design
 
 Rules for creating components:
 
+* Your component should generally [be small and do one thing well](http://c2.com/cgi/wiki?UnixDesignPhilosophy).
 * The `Component.initialize()` method is used for setting up ports and any initial state.
 * The `Component.run()` method is called by the runtime every time there's a new packet arrives on the `InputPort`
   and hasn't been received yet.
@@ -107,6 +113,9 @@ Rules for creating components:
   while waiting for data to arrive, so that they do not block greenlet execution.
 * You should always check that the return value of `Component.receive()` or `Component.receive_packet()` is not the
   sentinel object `EndOfStream`, denoting that the port was closed.
+* Calls to `Component.receive()` will put the component in the DORMANT state if an `EndOfStream` is returned.
+  The next successful call to `Component.receive()` will set it back to an ACTIVE state.
+
 
 ### Component States
 
@@ -118,9 +127,10 @@ Rules for creating components:
 | **ACTIVE** | Component has received data and is actively running. |
 | **SUSP_SEND** | Component is waiting for data to send on its output port. |
 | **SUSP_RECV** | Component is waiting to receive data on its input port. |
-| **DORMANT** | Component will terminate if no more send/recv calls are made and its run() method exits. |
+| **DORMANT** | Component will terminate when its `run()` method returns. |
 | **TERMINATED** | Component has successfully terminated execution (final state). |
 | **ERROR** | Component has terminated execution because of an error (final state). |
+
 
 ### Class Diagram
 
