@@ -31,9 +31,6 @@ class ComponentState(Enum):
     # Component is waiting to receive data on its input port.
     SUSP_RECV = 'SUSP_RECV'
 
-    # Component will terminate when its run() method returns.
-    DORMANT = 'DORMANT'
-
     # Component has successfully terminated execution (final state).
     TERMINATED = 'TERMINATED'
 
@@ -59,24 +56,15 @@ class Component(object):
 
         (ComponentState.ACTIVE, ComponentState.SUSP_SEND),
         (ComponentState.ACTIVE, ComponentState.SUSP_RECV),
-        (ComponentState.ACTIVE, ComponentState.DORMANT),
         (ComponentState.ACTIVE, ComponentState.TERMINATED),
         (ComponentState.ACTIVE, ComponentState.ERROR),
 
         (ComponentState.SUSP_SEND, ComponentState.ACTIVE),
-        (ComponentState.SUSP_SEND, ComponentState.DORMANT),
         (ComponentState.SUSP_SEND, ComponentState.ERROR),
 
         (ComponentState.SUSP_RECV, ComponentState.ACTIVE),
-        (ComponentState.SUSP_RECV, ComponentState.DORMANT),
         (ComponentState.SUSP_RECV, ComponentState.ERROR),
-        (ComponentState.SUSP_RECV, ComponentState.TERMINATED),
-
-        (ComponentState.DORMANT, ComponentState.ACTIVE),
-        (ComponentState.DORMANT, ComponentState.SUSP_SEND),
-        (ComponentState.DORMANT, ComponentState.SUSP_RECV),
-        (ComponentState.DORMANT, ComponentState.ERROR),
-        (ComponentState.DORMANT, ComponentState.TERMINATED)
+        (ComponentState.SUSP_RECV, ComponentState.TERMINATED)
     ])
 
     def __init__(self, name):
@@ -247,6 +235,7 @@ class InitialPacketGenerator(Component):
 
     def run(self):
         self.outputs['OUT'].send(self.value)
+        self.terminate()
 
 
 class Graph(Component):

@@ -170,9 +170,6 @@ class Port(BasePort):
         if not self.is_connected() and not self.optional:
             raise exc.PortError('%s must be connected' % self)
 
-        if not self.is_open():
-            raise exc.PortClosedError('%s is closed' % self)
-
     def __getitem__(self, index):
         raise ValueError('%s is not an array port' % self)
 
@@ -301,9 +298,12 @@ class OutputPort(Port):
         :param packet: the Packet to send over this output port.
         """
         if self.optional and not self.is_connected():
-            return
+            return EndOfStream
         else:
             self._check_ready_state()
+
+        if not self.is_open():
+            raise exc.PortClosedError('%s is closed' % self)
 
         if packet is EndOfStream:
             raise ValueError('You can not send an EndOfStream downstream!')

@@ -17,7 +17,9 @@ class Repeat(Component):
 
     def run(self):
         packet = self.inputs['IN'].receive_packet()
-        if packet is not EndOfStream:
+        if packet is EndOfStream:
+            self.terminate()
+        else:
             self.log.debug('Repeating: %s' % packet)
             self.outputs['OUT'].send_packet(packet)
 
@@ -33,7 +35,9 @@ class Drop(Component):
 
     def run(self):
         packet = self.inputs['IN'].receive_packet()
-        if packet is not EndOfStream:
+        if packet is EndOfStream:
+            self.terminate()
+        else:
             self.drop_packet(packet)
 
 
@@ -61,6 +65,7 @@ class Sleep(Component):
         while not self.is_terminated:
             packet = self.inputs['IN'].receive_packet()
             if packet is EndOfStream:
+                self.terminate()
                 break
 
             self.log.debug('Sleeping for %d seconds...' % delay_value)
@@ -111,6 +116,7 @@ class RegexFilter(Component):
         while not self.is_terminated:
             packet = self.inputs['IN'].receive_packet()
             if packet is EndOfStream:
+                self.terminate()
                 break
 
             if pattern.search(packet.value) is not None:
@@ -146,11 +152,10 @@ class Multiply(Component):
 
     def run(self):
         x = self.inputs['X'].receive()
-        if x is EndOfStream:
-            return
-
         y = self.inputs['Y'].receive()
-        if y is EndOfStream:
+
+        if x is EndOfStream or y is EndOfStream:
+            self.terminate()
             return
 
         result = int(x) * int(y)
@@ -178,6 +183,7 @@ class FileTailReader(Component):
 
         file_path = self.inputs['PATH'].receive()
         if file_path is EndOfStream:
+            self.terminate()
             return
 
         self.log.debug('Tailing file: %s' % file_path)
@@ -205,7 +211,9 @@ class ConsoleLineWriter(Component):
     def run(self):
         depth = 0
         packet = self.inputs['IN'].receive_packet()
-        if packet is not EndOfStream:
+        if packet is EndOfStream:
+            self.terminate()
+        else:
             if isinstance(packet, StartBracket):
                 print "[start group]"
                 depth += 1
@@ -214,6 +222,7 @@ class ConsoleLineWriter(Component):
                 depth -= 1
             else:
                 print ('-' * depth), packet.value
+
             self.outputs['OUT'].send_packet(packet)
             self.suspend()
 

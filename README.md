@@ -91,7 +91,9 @@ and `run()` methods:
            
         def run(self):
             input_packet = self.inputs['IN'].receive_packet()
-            if input_packet is not EndOfStream:
+            if input_packet is EndOfStream:
+                self.terminate()
+            else:
                 time.sleep(5)
                 self.outputs['OUT'].send_packet(input_packet)
 
@@ -104,17 +106,13 @@ Rules for creating components:
 * The `Component.initialize()` method is used for setting up ports and any initial state.
 * The `Component.run()` method is called by the runtime every time there's a new packet arrives on the `InputPort`
   and hasn't been received yet.
-* Components will automatically terminate execution after `Component.run()` completes and all upstream components
-  have been terminated as well.
-* Call `Component.terminate()` if you need to be explicit about terminating a component.
+* `Component.terminate()` needs to be called when your component is finished with a unit of work.
 * Call `Component.suspend()` if you need to be explicit about suspending execution (typically done in loops or when 
   waiting for some asynchronous task to complete).
-* Calls to `Port.send*()` or `Port.receive*()` implicitly call `Component.suspend()` in the `SingleProcessGraphExecutor`
-  while waiting for data to arrive, so that they do not block greenlet execution.
+* Calls to `Port.send*()` or `Port.receive*()` suspend execution while waiting for data to arrive, so that they do 
+  not block other processes.
 * You should always check that the return value of `Component.receive()` or `Component.receive_packet()` is not the
   sentinel object `EndOfStream`, denoting that the port was closed.
-* Calls to `Component.receive()` will put the component in the DORMANT state if an `EndOfStream` is returned.
-  The next successful call to `Component.receive()` will set it back to an ACTIVE state.
 
 
 ### Component States
@@ -127,7 +125,6 @@ Rules for creating components:
 | **ACTIVE** | Component has received data and is actively running. |
 | **SUSP_SEND** | Component is waiting for data to send on its output port. |
 | **SUSP_RECV** | Component is waiting to receive data on its input port. |
-| **DORMANT** | Component will terminate when its `run()` method returns. |
 | **TERMINATED** | Component has successfully terminated execution (final state). |
 | **ERROR** | Component has terminated execution because of an error (final state). |
 

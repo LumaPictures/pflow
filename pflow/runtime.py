@@ -155,7 +155,8 @@ class Runtime(object):
         if executor.is_running():
             raise ValueError('Graph %s is already started' % graph_id)
 
-        executor.execute()
+        gevent.spawn(executor.execute)
+        # TODO: send 'started' message back
 
     def stop(self, graph_id):
         """

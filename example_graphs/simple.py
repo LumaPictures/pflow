@@ -12,6 +12,7 @@ class Simple(Component):
 
             value = self.inputs['in'].receive()
             if value is EndOfStream:
+                self.terminate()
                 break
 
             print "value: %s" % value

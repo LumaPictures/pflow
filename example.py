@@ -36,7 +36,7 @@ def main():
     test_graphs = [
         example_graphs.simple.SimpleGraph('SIMPLE'),
         sag,
-        sag,
+        #sag,
         example_graphs.hype_machine.PopularMusicGraph('MUSIC_1'),
         #example_graphs.process_spawning_logger.ProcessSpawningLogger('PROCSPAWN_1')
     ]

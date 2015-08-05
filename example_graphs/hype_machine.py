@@ -28,6 +28,8 @@ class HypeMachinePopularTracksReader(Component):
         for track in tracks:
             self.outputs['OUT'].send(track)
 
+        self.terminate()
+
 
 class HypeMachineTrackStringifier(Component):
     def initialize(self):
@@ -38,8 +40,10 @@ class HypeMachineTrackStringifier(Component):
 
     def run(self):
         track = self.inputs['IN'].receive()
-
-        if track is not EndOfStream and track['artist'] and track['title']:
+        if track is EndOfStream:
+            self.terminate()
+            return
+        elif track['artist'] and track['title']:
             transformed = '%(artist)s - %(title)s' % track
             self.outputs['OUT'].send(transformed)
 

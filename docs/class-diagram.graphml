@@ -377,7 +377,7 @@ write_graphml(file_path : str)</y:MethodLabel>
       <data key="d4"/>
       <data key="d6">
         <y:UMLClassNode>
-          <y:Geometry height="156.02227723960584" width="147.67872903795228" x="226.16063548102386" y="396.988861380197"/>
+          <y:Geometry height="143.73305915871765" width="147.67872903795228" x="226.16063548102386" y="403.1334704206412"/>
           <y:Fill color="#339966" transparent="false"/>
           <y:BorderStyle color="#000000" type="line" width="1.0"/>
           <y:NodeLabel alignment="center" autoSizePolicy="content" fontFamily="Dialog" fontSize="13" fontStyle="bold" hasBackgroundColor="false" hasLineColor="false" height="19.310546875" modelName="custom" textColor="#000000" visible="true" width="114.271484375" x="16.70362233147614" y="26.1328125">ComponentState<y:LabelModel>
@@ -392,7 +392,6 @@ write_graphml(file_path : str)</y:MethodLabel>
 ACTIVE
 SUSP_RECV
 SUSP_SEND
-DORMANT
 TERMINATED
 ERROR</y:AttributeLabel>
             <y:MethodLabel/>

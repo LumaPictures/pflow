@@ -111,7 +111,6 @@ class SingleProcessGraphExecutor(GraphExecutor):
         dest_port = source_port.target_port
         q = self._get_or_create_queue(dest_port)
 
-        last_state = component.state
         component.state = ComponentState.SUSP_SEND
 
         self.log.debug('Sending packet from %s to %s: %s' %
@@ -120,7 +119,7 @@ class SingleProcessGraphExecutor(GraphExecutor):
         q.put(packet)
         component.suspend()
 
-        component.state = last_state
+        component.state = ComponentState.ACTIVE
 
     def receive_port(self, component, port_name, timeout=None):
         # TODO: implement timeout
@@ -129,11 +128,9 @@ class SingleProcessGraphExecutor(GraphExecutor):
 
         source_port = component.inputs[port_name]
         if not source_port.is_open():
-            return
+            return EndOfStream
 
         q = self._get_or_create_queue(source_port)
-
-        last_state = component.state
         component.state = ComponentState.SUSP_RECV
 
         self.log.debug('%s is waiting for data on %s' % (component, source_port))
@@ -141,19 +138,15 @@ class SingleProcessGraphExecutor(GraphExecutor):
             try:
                 packet = q.get(block=False)
                 self.log.debug('%s received packet on %s: %s' % (component, source_port, packet))
-                if last_state != ComponentState.DORMANT:
-                    component.state = last_state
-                else:
-                    component.state = ComponentState.ACTIVE
+                component.state = ComponentState.ACTIVE
                 return packet
             except queue.Empty:
-                # self.log.debug('No data on %s' % source_port)
                 if self.graph.is_upstream_terminated(component):
                     # No more data left to receive_packet and upstream has terminated.
-                    component.state = ComponentState.DORMANT
+                    component.state = ComponentState.ACTIVE
 
-                    # if source_port.is_open():
-                    #     source_port.close()
+                    if source_port.is_open():
+                        source_port.close()
 
                     return EndOfStream
                 else:
