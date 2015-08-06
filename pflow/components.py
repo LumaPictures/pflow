@@ -11,7 +11,7 @@ except ImportError:
 
 from .core import Graph, Component, ComponentState, \
     InputPort, OutputPort, \
-    ArrayInputPort, ArrayOutputPort
+    ArrayInputPort, ArrayOutputPort, keepalive
 
 from .port import EndOfStream, StartBracket, EndBracket, BracketPacket
 from . import exc
@@ -25,6 +25,7 @@ class Repeat(Component):
         self.inputs.add_ports(InputPort('IN'))
         self.outputs.add_ports(OutputPort('OUT'))
 
+    @keepalive
     def run(self):
         packet = self.inputs['IN'].receive_packet()
         if packet is EndOfStream:
@@ -47,7 +48,6 @@ class Constant(Component):
     def run(self):
         value = self.inputs['VALUE'].receive()
         if value is EndOfStream:
-            self.terminate()
             return
 
         limit = self.inputs['LIMIT'].receive()
@@ -58,7 +58,6 @@ class Constant(Component):
         while not self.is_terminated:
             count += 1
             if limit is not None and count > limit:
-                self.terminate()
                 break
 
             self.outputs['OUT'].send(value)
@@ -73,6 +72,7 @@ class Drop(Component):
     def initialize(self):
         self.inputs.add_ports(InputPort('IN'))
 
+    @keepalive
     def run(self):
         packet = self.inputs['IN'].receive_packet()
         if packet is EndOfStream:
@@ -93,6 +93,7 @@ class Sleep(Component):
                                         description='Number of seconds to delay'))
         self.outputs.add_ports(OutputPort('OUT'))
 
+    @keepalive
     def run(self):
         delay_value = self.inputs['DELAY'].receive()
         if delay_value is EndOfStream:
@@ -128,6 +129,7 @@ class DynamicSleep(Component):
                                         description='Number of seconds to delay'))
         self.outputs.add_ports(OutputPort('OUT'))
 
+    @keepalive
     def run(self):
         delay_value = self.inputs['DELAY'].receive()
         if delay_value is EndOfStream:
@@ -157,6 +159,7 @@ class Splitter(Component):
         self.outputs.add('OUT_A')
         self.outputs.add('OUT_B')
 
+    @keepalive
     def run(self):
         packet = self.inputs['IN'].receive_packet()
         if packet is EndOfStream:
@@ -190,6 +193,7 @@ class Splitter(Component):
 #         self.inputs.add_ports(InputPort('IN'))
 #         self.outputs.add_ports(ArrayOutputPort('OUT', 10))
 #
+#     @keepalive
 #     def run(self):
 #         packet = self.inputs['IN'].receive_packet()
 #         if packet is not EndOfStream:
@@ -207,6 +211,7 @@ class Cons(Component):
         self.outputs.add_ports(OutputPort('OUT',
                                           description='Tuple stream'))
 
+    @keepalive
     def run(self):
         a = self.inputs['A'].receive()
         if a is EndOfStream:
@@ -235,6 +240,7 @@ class Decons(Component):
         self.outputs.add('OUT_A')
         self.outputs.add('OUT_B')
 
+    @keepalive
     def run(self):
         value = self.inputs['IN'].receive()
         if value is EndOfStream:
@@ -264,6 +270,7 @@ class DictValueExtractor(Component):
                                         description='Key to extract values for'))
         self.outputs.add('OUT')
 
+    @keepalive
     def run(self):
         key = self.inputs['KEY'].receive()
         if key is EndOfStream:
@@ -300,6 +307,7 @@ class RegexFilter(Component):
                                           allowed_types=[str],
                                           description='String that matched filter'))
 
+    @keepalive
     def run(self):
         import re
 
@@ -330,6 +338,7 @@ class RegexFilter(Component):
 #         self.inputs.add_ports(ArrayInputPort('IN', 10))
 #         self.outputs.add_ports(OutputPort('OUT'))
 #
+#     @keepalive
 #     def run(self):
 #         for inp in self.inputs['IN']:
 #             packet = inp.receive()
@@ -345,6 +354,7 @@ class Multiply(Component):
                               InputPort('Y'))
         self.outputs.add_ports(OutputPort('OUT'))
 
+    @keepalive
     def run(self):
         x = self.inputs['X'].receive()
         y = self.inputs['Y'].receive()
@@ -367,6 +377,7 @@ class Modulo(Component):
         self.inputs.add('MODULO')
         self.outputs.add('OUT')
 
+    @keepalive
     def run(self):
         value = self.inputs['IN'].receive()
         if value is EndOfStream:
@@ -399,6 +410,7 @@ class Binner(Component):
         self.outputs.add_ports(OutputPort('OUT',
                                           description='Stream of values, bracketed by size'))
 
+    @keepalive
     def run(self):
         max_size = self.inputs['MAX_SIZE'].receive()
 
@@ -476,6 +488,7 @@ class FileTailReader(Component):
         self.outputs.add_ports(OutputPort('OUT',
                                           description='Lines that are added to file'))
 
+    @keepalive
     def run(self):
         import sh
 
@@ -511,6 +524,7 @@ class ConsoleLineWriter(Component):
         self.outputs.add_ports(OutputPort('OUT',
                                           optional=True))
 
+    @keepalive
     def run(self):
         silence = self.inputs['SILENCE'].receive()
         if silence is EndOfStream:
@@ -570,6 +584,7 @@ class MongoCollectionWriter(Component):
                                         optional=True,
                                         description='If True, delete all documents in collection before writing to it'))
 
+    @keepalive
     def run(self):
         import pymongo
 
@@ -696,7 +711,6 @@ class RandomNumberGenerator(Component):
 
                 if limit_value is not None:
                     if i >= limit_value:
-                        self.terminate()
                         break
 
                 i += 1

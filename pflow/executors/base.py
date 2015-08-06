@@ -44,15 +44,21 @@ class GraphExecutor(object):
                     raise exc.ComponentStateError('%s state is %s, but expected INITIALIZED' % (component,
                                                                                                 component.state))
 
+                run_func = component.run
+                keepalive = (hasattr(run_func, '_component_keepalive') and run_func._component_keepalive)
+
                 component.state = ComponentState.ACTIVE
                 while not component.is_terminated:
 
                     # Run the component
-                    component.run()
+                    run_func()
 
                     if not component.is_terminated:
                         # Suspend execution until there's more data to process.
                         component.suspend()
+
+                    if not keepalive:
+                        component.terminate()
 
             finally:
                 component.destroy()

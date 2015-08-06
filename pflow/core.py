@@ -89,6 +89,18 @@ def assert_not_component_state(*disallowed_states):
     return inner_fn
 
 
+def keepalive(fn):
+    """
+    Decorator that tells the runtime to only invoke the component's run() method until it explicitly terminate()s
+    its own execution.
+    """
+    if fn.func_name != 'run':
+        raise ValueError('The run_once decorator was only intended for the Component.run() method')
+
+    fn._component_keepalive = True
+    return fn
+
+
 class Component(object):
     """
     Component instances are "process" nodes in a flow-based digraph.
@@ -306,7 +318,6 @@ class InitialPacketGenerator(Component):
 
     def run(self):
         self.outputs['OUT'].send(self.value)
-        self.terminate()
 
 
 class Graph(Component):

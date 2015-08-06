@@ -77,7 +77,7 @@ You can find some premade components in the `pflow.components` module. If you ca
 you can always create a custom component by subclassing `pflow.core.Component`, then overriding the `initialize()` 
 and `run()` methods:
 
-    from pflow.core import Component, InputPort, OutputPort, EndOfStream
+    from pflow.core import Component, InputPort, OutputPort, EndOfStream, keepalive
     
     
     class MySleepComponent(Component):
@@ -88,7 +88,8 @@ and `run()` methods:
         def initialize(self):
             self.inputs.add(InputPort('IN'))
             self.outputs.add(OutputPort('OUT'))
-           
+        
+        @keepalive
         def run(self):
             input_packet = self.inputs['IN'].receive_packet()
             if input_packet is EndOfStream:
@@ -104,9 +105,10 @@ Rules for creating components:
 
 * Your component should generally [be small and do one thing well](http://c2.com/cgi/wiki?UnixDesignPhilosophy).
 * The `Component.initialize()` method is used for setting up ports and any initial state.
-* The `Component.run()` method is called by the runtime every time there's a new packet arrives on the `InputPort`
-  and hasn't been received yet.
-* `Component.terminate()` needs to be called when your component is finished with a unit of work.
+* The `Component.run()` method is called by the runtime only once before the component is automatically terminated.
+  If you don't want this behavior, you can either write your code in a `while not self.is_terminated: ...` loop or
+  simply decorate the `run()` method with `@keepalive`. If you decide to use the decorator, you must explicitly
+  `terminate()` the component when you are finished.
 * Call `Component.suspend()` if you need to be explicit about suspending execution (typically done in loops or when 
   waiting for some asynchronous task to complete).
 * Calls to `Port.send*()` or `Port.receive*()` suspend execution while waiting for data to arrive, so that they do 
