@@ -2,6 +2,8 @@ from abc import ABCMeta, abstractmethod
 import logging
 import json
 import inspect
+import collections
+import functools
 
 try:
     import queue  # 3.x
@@ -19,8 +21,11 @@ log = logging.getLogger(__name__)
 
 class ComponentState(Enum):
 
-    # Component hasn't started because it hasn't received any data yet (initial state).
-    NOT_STARTED = 'NOT_STARTED'
+    # Comonent hasn't been initialized yet (initial state).
+    NOT_INITIALIZED = 'NOT_INITIALIZED'
+
+    # Component is initialized, but hasn't been run yet.
+    INITIALIZED = 'INITIALIZED'
 
     # Component has received data and is actively running.
     ACTIVE = 'ACTIVE'
@@ -38,6 +43,52 @@ class ComponentState(Enum):
     ERROR = 'ERROR'
 
 
+def assert_component_state(*allowed_states):
+    """
+    Decorator that asserts the Component is in one of the given allowed_states
+    before the method it wraps can be called.
+
+    :param allowed_states: allowed ComponentStates
+    """
+    def inner_fn(fn):
+        def assert_component_state_decorator(self, *args, **kwargs):
+            if self.state not in allowed_states:
+                raise exc.ComponentStateError('%s.%s() called on component %s in unexpected state %s '
+                                              '(expecting one of: %s)' % (self.__class__.__name__,
+                                                                          fn.__name__,
+                                                                          self.name,
+                                                                          self.state,
+                                                                          ', '.join(map(str, allowed_states))))
+            return fn(self, *args, **kwargs)
+
+        return functools.wraps(fn)(assert_component_state_decorator)
+
+    return inner_fn
+
+
+def assert_not_component_state(*disallowed_states):
+    """
+    Decorator that asserts the Component is not in one of the given disallowed_states
+    before the method it wraps can be called.
+
+    :param disallowed_states: disallowed ComponentStates
+    """
+    def inner_fn(fn):
+        def assert_not_component_state_decorator(self, *args, **kwargs):
+            if self.state in disallowed_states:
+                raise exc.ComponentStateError('%s.%s() called on component %s in unexpected state %s '
+                                              '(not expecting one of: %s)' % (self.__class__.__name__,
+                                                                              fn.__name__,
+                                                                              self.name,
+                                                                              self.state,
+                                                                              ', '.join(map(str, disallowed_states))))
+            return fn(self, *args, **kwargs)
+
+        return functools.wraps(fn)(assert_not_component_state_decorator)
+
+    return inner_fn
+
+
 class Component(object):
     """
     Component instances are "process" nodes in a flow-based digraph.
@@ -52,7 +103,11 @@ class Component(object):
     # See ../docs/states.graphml for how this is visually represented.
     # Please keep this list of edges in sync with the graphml and README.md docs!
     _valid_transitions = frozenset([
-        (ComponentState.NOT_STARTED, ComponentState.ACTIVE),
+        (ComponentState.NOT_INITIALIZED, ComponentState.INITIALIZED),
+
+        (ComponentState.INITIALIZED, ComponentState.ACTIVE),
+        (ComponentState.INITIALIZED, ComponentState.TERMINATED),  # This may happen when the graph shuts down and
+                                                                  # a component hasn't been run yet.
 
         (ComponentState.ACTIVE, ComponentState.SUSP_SEND),
         (ComponentState.ACTIVE, ComponentState.SUSP_RECV),
@@ -78,12 +133,13 @@ class Component(object):
                                                     self.__class__.__name__,
                                                     self.name))
 
+        self._state = ComponentState.NOT_INITIALIZED
         self.initialize()
+        self.state = ComponentState.INITIALIZED
 
         self.executor = None
         self.stack = queue.LifoQueue()  # Used for simple bracket packets
         self.owned_packet_count = 0
-        self._state = ComponentState.NOT_STARTED
 
     @property
     def state(self):
@@ -126,6 +182,7 @@ class Component(object):
         # TODO: Fire a transition event
 
     # @abstractmethod
+    @assert_component_state(ComponentState.NOT_INITIALIZED)
     def initialize(self):
         """
         Initialization code necessary to define this component.
@@ -133,12 +190,14 @@ class Component(object):
         pass
 
     @abstractmethod
+    @assert_component_state(ComponentState.INITIALIZED)
     def run(self):
         """
         This method is called any time the port is open and a new Packet arrives.
         """
         pass
 
+    @assert_component_state(ComponentState.TERMINATED, ComponentState.ERROR)
     def destroy(self):
         """
         Implementations can override this to call any cleanup code when the component
@@ -146,6 +205,7 @@ class Component(object):
         """
         self.log.debug('Destroyed')
 
+    @assert_not_component_state(ComponentState.TERMINATED, ComponentState.ERROR)
     def create_packet(self, value=None):
         """
         Create a new packet and set self as owner.
@@ -159,6 +219,7 @@ class Component(object):
         self.owned_packet_count += 1
         return packet
 
+    @assert_not_component_state(ComponentState.TERMINATED, ComponentState.ERROR)
     def drop_packet(self, packet):
         """
         Drop a Packet.
@@ -184,6 +245,7 @@ class Component(object):
         return self.state in (ComponentState.SUSP_RECV,
                               ComponentState.SUSP_SEND)
 
+    @assert_not_component_state(ComponentState.TERMINATED, ComponentState.ERROR)
     def terminate(self, ex=None):
         """
         Terminate execution for this component.
@@ -250,7 +312,8 @@ class Graph(Component):
         self.components = set()  # Nodes
         super(Graph, self).__init__(*args, **kwargs)
 
-    def get_upstream(self, component):
+    @classmethod
+    def get_upstream(cls, component):
         """
         Immediate upstream components.
         """
@@ -262,7 +325,8 @@ class Graph(Component):
 
         return upstream
 
-    def get_downstream(self, component):
+    @classmethod
+    def get_downstream(cls, component):
         """
         Immediate downstream components.
         """
@@ -274,14 +338,15 @@ class Graph(Component):
 
         return downstream
 
-    def is_upstream_terminated(self, component):
+    @classmethod
+    def is_upstream_terminated(cls, component):
         """
         Are all of a component's upstream components terminated?
 
         :param component: the component to check.
         :return: whether or not the upstream components have been terminated.
         """
-        return all([c.is_terminated for c in self.get_upstream(component)])
+        return all([c.is_terminated for c in cls.get_upstream(component)])
 
     def add_component(self, component):
         if not isinstance(component, Component):

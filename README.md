@@ -121,7 +121,8 @@ Rules for creating components:
 
 | State | Description |
 | ----- | ----------- |
-| **NOT_STARTED** | Component hasn't started because it hasn't received any data yet (initial state). |
+| **NOT_INITIALIZED** | Comonent hasn't been initialized yet (initial state). | 
+| **INITIALIZED** | Component is initialized, but hasn't been run yet. |
 | **ACTIVE** | Component has received data and is actively running. |
 | **SUSP_SEND** | Component is waiting for data to send on its output port. |
 | **SUSP_RECV** | Component is waiting to receive data on its input port. |

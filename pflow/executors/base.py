@@ -39,9 +39,9 @@ class GraphExecutor(object):
             component._out_queues = out_queues
 
             try:
-                # Component should always be in a NOT_STARTED state when first running!
-                if component.state != ComponentState.NOT_STARTED:
-                    raise exc.ComponentStateError('%s state is %s, but expected NOT_STARTED' % (component,
+                # Component should always be in a INITIALIZED state when first running!
+                if component.state != ComponentState.INITIALIZED:
+                    raise exc.ComponentStateError('%s state is %s, but expected INITIALIZED' % (component,
                                                                                                 component.state))
 
                 component.state = ComponentState.ACTIVE
@@ -75,7 +75,7 @@ class GraphExecutor(object):
             reset_ports(component.inputs)
             reset_ports(component.outputs)
 
-            component._state = ComponentState.NOT_STARTED
+            component._state = ComponentState.INITIALIZED
             component.executor = None
 
             if hasattr(component, '_in_queues'):

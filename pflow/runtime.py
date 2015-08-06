@@ -580,7 +580,7 @@ def main():
         runtime_id = args.runtime_id
         if not runtime_id:
             runtime_id = FlowhubRegistry.create_runtime_id()
-            log.warn('No runtime ID was specified in FLOWHUB_RUNTIME_ID, so one was generated: %s' % runtime_id)
+            log.warn('No runtime ID was specified, so one was generated: %s' % runtime_id)
 
         # Register runtime
         flowhub.register_runtime(runtime_id, args.user_id, args.label,
