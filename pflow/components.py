@@ -1,10 +1,19 @@
 import logging
+import collections
+import sys
+import os
+import copy
+
+try:
+    import queue  # 3.x
+except ImportError:
+    import Queue as queue  # 2.x
 
 from .core import Graph, Component, ComponentState, \
     InputPort, OutputPort, \
     ArrayInputPort, ArrayOutputPort
 
-from .port import EndOfStream, Packet, StartBracket, EndBracket
+from .port import EndOfStream, StartBracket, EndBracket, BracketPacket
 
 
 class Repeat(Component):
@@ -74,7 +83,7 @@ class Sleep(Component):
             self.outputs['OUT'].send_packet(packet)
 
 
-class Split(Component):
+class Splitter(Component):
     """
     Splits inputs from IN to OUT_A and OUT_B.
     """
@@ -89,15 +98,26 @@ class Split(Component):
             self.terminate()
             return
 
-        a_packet = Packet(packet.value)
-        b_packet = Packet(packet.value)
+        out_a = self.outputs['OUT_A']
+        out_b = self.outputs['OUT_B']
+
+        if isinstance(packet, StartBracket):
+            self.log.debug("Bracket open")
+            out_a.start_bracket()
+            out_b.start_bracket()
+        elif isinstance(packet, EndBracket):
+            self.log.debug("Bracket close")
+            out_a.end_bracket()
+            out_b.end_bracket()
+        else:
+            self.log.debug('Send: %s' % packet.value)
+            out_a.send(packet.value)
+            out_b.send(packet.value)
+
         self.drop_packet(packet)
 
-        self.outputs['OUT_A'].send_packet(a_packet)
-        self.outputs['OUT_B'].send_packet(b_packet)
 
-
-# class Split(Component):
+# class Splitter(Component):
 #     """
 #     Splits inputs from IN to OUT[]
 #     """
@@ -110,6 +130,93 @@ class Split(Component):
 #         if packet is not EndOfStream:
 #             for outp in self.outputs['OUT']:
 #                 outp.send_packet(packet)
+
+
+class Cons(Component):
+    """
+    Joins inputs A and B into tuples emitted to OUT.
+    """
+    def initialize(self):
+        self.inputs.add('A')
+        self.inputs.add('B')
+        self.outputs.add_ports(OutputPort('OUT',
+                                          description='Tuple stream'))
+
+    def run(self):
+        a = self.inputs['A'].receive()
+        if a is EndOfStream:
+            self.terminate()
+            return
+
+        b = self.inputs['B'].receive()
+        if b is EndOfStream:
+            self.terminate()
+            return
+
+        cons_val = (a, b)
+        self.log.debug('Cons: ' + str(cons_val))
+
+        self.outputs['OUT'].send(cons_val)
+
+
+class Decons(Component):
+    """
+    Breaks apart tuples from input IN and emits values to OUT_A and OUT_B.
+    """
+    def initialize(self):
+        self.inputs.add_ports(InputPort('IN',
+                                        allowed_types=[tuple, list],
+                                        description='Tuple stream'))
+        self.outputs.add('OUT_A')
+        self.outputs.add('OUT_B')
+
+    def run(self):
+        value = self.inputs['IN'].receive()
+        if value is EndOfStream:
+            self.terminate()
+            return
+
+        assert isinstance(value, (tuple, list))
+        assert len(value) == 2
+
+        a, b = value
+        self.log.debug('Decons: %s, %s' % (a, b))
+
+        self.outputs['OUT_A'].send(a)
+        self.outputs['OUT_B'].send(b)
+
+
+class DictValueExtractor(Component):
+    """
+    Filters a stream of dicts from input IN, extracting a stream of values
+    (matching KEY) on OUT.
+    """
+    def initialize(self):
+        self.inputs.add_ports(InputPort('IN',
+                                        allowed_types=[collections.MutableMapping],
+                                        description='Dictionaries to filter'),
+                              InputPort('KEY',
+                                        description='Key to extract values for'))
+        self.outputs.add('OUT')
+
+    def run(self):
+        key = self.inputs['KEY'].receive()
+        if key is EndOfStream:
+            self.terminate()
+            return
+
+        while not self.is_terminated:
+            d = self.inputs['IN'].receive()
+            if d is EndOfStream:
+                self.terminate()
+                break
+
+            assert isinstance(d, collections.MutableMapping)
+
+            value = d.get(key)
+            self.log.debug('Extracted: %s -> %s' % (key, value))
+
+            self.outputs['OUT'].send(value)
 
 
 class RegexFilter(Component):
@@ -189,6 +296,72 @@ class Multiply(Component):
         self.outputs['OUT'].send(result)
 
 
+class Binner(Component):
+    def initialize(self):
+        self.inputs.add_ports(InputPort('IN',
+                                        description='Tuples of (value, size) or simply size'),
+                              InputPort('MAX_SIZE',
+                                        allowed_types=[int, float],
+                                        description='Max size threshold before bin bracket gets sent downstream'),
+                              InputPort('TIMEOUT',
+                                        allowed_types=[int],
+                                        optional=True,
+                                        description='Number of seconds to wait for receive before closing bin'))
+        self.outputs.add_ports(OutputPort('OUT',
+                                          description='Stream of values, bracketed by size'))
+
+    def run(self):
+        max_size = self.inputs['MAX_SIZE'].receive()
+
+        timeout = self.inputs['TIMEOUT'].receive()
+        if timeout is EndOfStream:
+            timeout = None
+        else:
+            self.log.debug('Will timeout receives after %d seconds' % timeout)
+
+        outport = self.outputs['OUT']
+
+        total = 0
+        started = False
+
+        while not self.is_terminated:
+            value_tuple = self.inputs['IN'].receive(timeout=timeout)
+            if value_tuple is EndOfStream:
+                if started:
+                    # End bin
+                    self.log.debug('Ending bin')
+                    outport.end_bracket()
+
+                self.terminate()
+                break
+            elif isinstance(value_tuple, BracketPacket):
+                # Ignore incoming brackets
+                continue
+
+            if isinstance(value_tuple, (list, tuple)):
+                value, size = value_tuple
+            else:
+                value = size = value_tuple
+
+            if not started:
+                started = True
+                # Start initial bin
+                self.log.debug('Starting initial bin')
+                outport.start_bracket()
+                total = size
+            elif size + total > max_size:
+                total = size
+                # Start new bin
+                self.log.debug('Starting new bin (%d > %d)' % (total, max_size))
+                outport.end_bracket()
+                outport.start_bracket()
+            else:
+                total += size
+
+            self.log.debug('Binned: %s' % value)
+            outport.send(value)
+
+
 class FileTailReader(Component):
     """
     Tails a file specified in input port PATH and follows it,
@@ -228,29 +401,51 @@ class ConsoleLineWriter(Component):
     This component is a sink.
     """
     def initialize(self):
-        self.inputs.add('IN')
-        self.outputs.add_ports(OutputPort('OUT', optional=True))
+        self.inputs.add_ports(InputPort('IN'),
+                              InputPort('SILENCE',
+                                        allowed_types=[bool],
+                                        optional=True,
+                                        description='Silence the console output? (useful for debugging)'))
+        self.outputs.add_ports(OutputPort('OUT',
+                                          optional=True))
 
     def run(self):
+        silence = self.inputs['SILENCE'].receive()
+        if silence is EndOfStream:
+            silence = False
+
         depth = 0
-        packet = self.inputs['IN'].receive_packet()
-        if packet is EndOfStream:
-            self.terminate()
-        else:
-            if isinstance(packet, StartBracket):
-                print "[start group]"
-                depth += 1
-            elif isinstance(packet, EndBracket):
-                print "[end group]"
-                depth -= 1
+        while not self.is_terminated:
+            packet = self.inputs['IN'].receive_packet()
+            if packet is EndOfStream:
+                self.terminate()
+                break
             else:
-                print ('-' * depth), packet.value
+                if isinstance(packet, StartBracket):
+                    if not silence:
+                        self._write_line("[start group]")
+                    depth += 1
+                elif isinstance(packet, EndBracket):
+                    if not silence:
+                        self._write_line("[end group]")
+                    depth -= 1
+                elif not silence:
+                    self._write('-' * depth)
+                    self._write_line(packet.value)
 
-            # Forward to output port
-            if self.outputs['OUT'].is_connected():
-                self.outputs['OUT'].send_packet(packet)
+                # Forward to output port
+                if self.outputs['OUT'].is_connected():
+                    self.outputs['OUT'].send_packet(packet)
 
-            self.suspend()
+                self.suspend()
+
+    def _write(self, text):
+        sys.stdout.write(text)
+
+    def _write_line(self, line):
+        self._write('%s%s' % (line, os.linesep))
+        sys.stdout.flush()
+
 
 
 class MongoCollectionWriter(Component):
@@ -291,17 +486,53 @@ class MongoCollectionWriter(Component):
             self.log.warn('Deleting collection: %s' % collection_name)
             collection.remove()
 
-        while not self.is_terminated:
-            packet = self.inputs['IN'].receive_packet()
-            if packet is EndOfStream:
-                break
-            else:
-                collection.insert_one(packet.value)
+        bracket_depth = 0
+        batch = []
 
-        mongo_client.close()
+        try:
+            while not self.is_terminated:
+                packet = self.inputs['IN'].receive_packet()
+                if packet is EndOfStream:
+                    self.terminate()
+                    break
 
-        if not self.is_terminated:
-            self.terminate()
+                elif isinstance(packet, StartBracket):
+                    bracket_depth += 1
+                    self.drop_packet(packet)
+
+                elif isinstance(packet, EndBracket):
+                    bracket_depth -= 1
+                    self.drop_packet(packet)
+
+                    if bracket_depth == 0:
+                        # Do batch insert
+                        self.log.debug('Batch inserting %d records...' % len(batch))
+                        if len(batch) > 0:
+                            collection.insert_many(batch)
+
+                        batch = []
+
+                else:
+                    # Value
+                    value = packet.value
+                    self.drop_packet(packet)
+
+                    if not isinstance(value, collections.MutableMapping):
+                        # Mongo only accepts dict-like structures.
+                        value = {'value': value}
+
+                    if bracket_depth == 0:
+                        # Do a direct insert if there is no bracket open.
+                        self.log.debug('Immediate insert: %s' % value)
+                        collection.insert_one(value)
+                    else:
+                        # If there is a bracket open, buffer the insert so that it can be flushed
+                        # with a bulk insert when the bracket is closed.
+                        batch.append(value)
+                        self.log.debug('Delayed insert: %s (rows=%s)' % (value, batch))
+
+        finally:
+            mongo_client.close()
 
 
 # class LogTap(Graph):

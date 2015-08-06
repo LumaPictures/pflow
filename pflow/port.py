@@ -62,7 +62,7 @@ class BracketPacket(Packet):
                     for a given key. Keyed and unkeyed brackets can be mixed,
                     but every keyed StartBracket must have a keyed EndBracket.
         """
-        super(BracketPacket, self).__init__(None)
+        super(BracketPacket, self).__init__(self.__class__.__name__)
         self.key = key
 
 
@@ -127,6 +127,9 @@ class Port(BasePort):
 
         self.component = None  # Owning component
         self._is_open = True
+
+        self.log = logging.getLogger('%s.%s' % (self.__class__.__module__,
+                                                self.__class__.__name__))
 
     def supports_type(self, type_):
         if not isinstance(type_, type):
@@ -200,26 +203,26 @@ class InputPort(Port):
         return (self.component is not None and
                 self.source_port is not None)
 
-    def receive_packet(self):
+    def receive_packet(self, timeout=None):
         """
         Receive the next Packet from this input port.
 
         :return: Packet that was received or None if EOF
         """
-        from .core import ComponentState
-
         # Optional port with no connection
         if self.optional and not self.is_connected():
             return EndOfStream
         else:
             self._check_ready_state()
 
-        packet = self.component.executor.receive_port(self.component, self.name)
+        packet = self.component.executor.receive_port(self.component,
+                                                      self.name,
+                                                      timeout=timeout)
 
         return packet
 
-    def receive(self):
-        packet = self.receive_packet()
+    def receive(self, timeout=None):
+        packet = self.receive_packet(timeout=timeout)
         if packet is EndOfStream:
             return packet
         else:
@@ -333,7 +336,7 @@ class OutputPort(Port):
 
     def close(self):
         if self._bracket_depth != 0:
-            raise ValueError('There are %d open brackets on %s' % self)
+            raise ValueError('There are %d open brackets on %s' % (self._bracket_depth, self))
 
         if self.is_open():
             self.component.executor.close_output_port(self.component, self.name)

@@ -71,10 +71,13 @@ class PopularMusicGraph(Graph):
 
         console_writer = ConsoleLineWriter('CONSOLE_WRITER')
 
-        splitter = Split('SPLITTER')
+        splitter = Splitter('SPLITTER')
         transform = HypeTrackToDocumentTransformer('TRANSFORM')
+        title_extractor = DictValueExtractor('TITLE_EXTRACTOR')
+        self.set_initial_packet(title_extractor.inputs['KEY'], 'label')
 
         self.connect(track_reader.outputs['OUT'], transform.inputs['IN'])
         self.connect(transform.outputs['OUT'], splitter.inputs['IN'])
-        self.connect(splitter.outputs['OUT_A'], console_writer.inputs['IN'])
+        self.connect(splitter.outputs['OUT_A'], title_extractor.inputs['IN'])
+        self.connect(title_extractor.outputs['OUT'], console_writer.inputs['IN'])
         self.connect(splitter.outputs['OUT_B'], mongo_writer.inputs['IN'])
