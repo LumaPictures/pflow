@@ -14,6 +14,7 @@ from .core import Graph, Component, ComponentState, \
     ArrayInputPort, ArrayOutputPort
 
 from .port import EndOfStream, StartBracket, EndBracket, BracketPacket
+from . import exc
 
 
 class Repeat(Component):
@@ -31,6 +32,36 @@ class Repeat(Component):
         else:
             self.log.debug('Repeating: %s' % packet)
             self.outputs['OUT'].send_packet(packet)
+
+
+class Constant(Component):
+    """
+    Repeats a constant VALUE (set once) to OUT, LIMIT times (or infinitely if none).
+    """
+    def initialize(self):
+        self.inputs.add_ports(InputPort('VALUE'),
+                              InputPort('LIMIT',
+                                        optional=True))
+        self.outputs.add('OUT')
+
+    def run(self):
+        value = self.inputs['VALUE'].receive()
+        if value is EndOfStream:
+            self.terminate()
+            return
+
+        limit = self.inputs['LIMIT'].receive()
+        if limit is EndOfStream:
+            limit = None
+
+        count = 0
+        while not self.is_terminated:
+            count += 1
+            if limit is not None and count > limit:
+                self.terminate()
+                break
+
+            self.outputs['OUT'].send(value)
 
 
 class Drop(Component):
@@ -67,9 +98,9 @@ class Sleep(Component):
         if delay_value is EndOfStream:
             delay_value = 0
 
-        if delay_value == 0:
-            self.log.warn('Using a %s component with no DELAY is the same as using Repeat' %
-                          self.__class__.__name__)
+        # if delay_value == 0:
+        #     self.log.warn('Using a %s component with no DELAY is the same as using Repeat' %
+        #                   self.__class__.__name__)
 
         while not self.is_terminated:
             packet = self.inputs['IN'].receive_packet()
@@ -81,6 +112,40 @@ class Sleep(Component):
             self.suspend(delay_value)
 
             self.outputs['OUT'].send_packet(packet)
+
+
+class DynamicSleep(Component):
+    """
+    Repeater that sleeps for DELAY seconds before
+    repeating inputs from IN to OUT.
+
+    The difference between this and Sleep is that it constantly reads the DELAY value.
+    """
+    def initialize(self):
+        self.inputs.add_ports(InputPort('IN'),
+                              InputPort('DELAY',
+                                        allowed_types=[int],
+                                        description='Number of seconds to delay'))
+        self.outputs.add_ports(OutputPort('OUT'))
+
+    def run(self):
+        delay_value = self.inputs['DELAY'].receive()
+        if delay_value is EndOfStream:
+            delay_value = 0
+
+        # if delay_value == 0:
+        #     self.log.warn('Using a %s component with no DELAY is the same as using Repeat' %
+        #                   self.__class__.__name__)
+
+        packet = self.inputs['IN'].receive_packet()
+        if packet is EndOfStream:
+            self.terminate()
+            return
+
+        self.log.debug('Sleeping for %d seconds...' % delay_value)
+        self.suspend(delay_value)
+
+        self.outputs['OUT'].send_packet(packet)
 
 
 class Splitter(Component):
@@ -288,10 +353,34 @@ class Multiply(Component):
             self.terminate()
             return
 
-        result = int(x) * int(y)
+        result = x * y
 
-        self.log.debug('Multiply %s * %s = %d' %
+        self.log.debug('Multiply %d * %d = %d' %
                        (x, y, result))
+
+        self.outputs['OUT'].send(result)
+
+
+class Modulo(Component):
+    def initialize(self):
+        self.inputs.add('IN')
+        self.inputs.add('MODULO')
+        self.outputs.add('OUT')
+
+    def run(self):
+        value = self.inputs['IN'].receive()
+        if value is EndOfStream:
+            self.terminate()
+            return
+
+        modulo = self.inputs['MODULO'].receive()
+        if modulo is EndOfStream:
+            self.terminate()
+            return
+
+        result = float(value) % float(modulo)
+
+        self.log.debug('Modulo %d %% %d = %d' % (value, modulo, result))
 
         self.outputs['OUT'].send(result)
 
@@ -306,7 +395,7 @@ class Binner(Component):
                               InputPort('TIMEOUT',
                                         allowed_types=[int],
                                         optional=True,
-                                        description='Number of seconds to wait for receive before closing bin'))
+                                        description='Number of seconds to wait for receive before ending current bin'))
         self.outputs.add_ports(OutputPort('OUT',
                                           description='Stream of values, bracketed by size'))
 
@@ -322,15 +411,26 @@ class Binner(Component):
         outport = self.outputs['OUT']
 
         total = 0
+        bracket_sent_packets = 0
         started = False
 
         while not self.is_terminated:
-            value_tuple = self.inputs['IN'].receive(timeout=timeout)
+            try:
+                value_tuple = self.inputs['IN'].receive(timeout=timeout)
+            except exc.PortTimeout:
+                self.log.warn('Closing bracket because of receive timeout on %s' % self.inputs['IN'])
+                if started and bracket_sent_packets > 0:
+                    outport.end_bracket()
+                    bracket_sent_packets = 0
+                    outport.start_bracket()
+                continue
+
             if value_tuple is EndOfStream:
                 if started:
                     # End bin
                     self.log.debug('Ending bin')
                     outport.end_bracket()
+                    bracket_sent_packets = 0
 
                 self.terminate()
                 break
@@ -354,12 +454,14 @@ class Binner(Component):
                 # Start new bin
                 self.log.debug('Starting new bin (%d > %d)' % (total, max_size))
                 outport.end_bracket()
+                bracket_sent_packets = 0
                 outport.start_bracket()
             else:
                 total += size
 
             self.log.debug('Binned: %s' % value)
             outport.send(value)
+            bracket_sent_packets += 1
 
 
 class FileTailReader(Component):

@@ -110,13 +110,14 @@ class GraphExecutor(object):
         self._reset_components()
 
     @abstractmethod
-    def send_port(self, component, port_name, packet):
+    def send_port(self, component, port_name, packet, timeout=None):
         """
         Sends a packet on a component's output port.
 
         :param component: the component the packet is being sent from.
         :param port_name: the name of the component's output port.
         :param packet: the packet to send.
+        :param timeout: number of seconds to wait for the next packet before raising a exc.PortTimeout.
         """
         pass
 
@@ -127,7 +128,7 @@ class GraphExecutor(object):
 
         :param component: the component the packet is being received for.
         :param port_name: the name of the component's input port.
-        :param timeout: number of seconds to wait for the next packet before raising a exc.PortReceiveTimeout.
+        :param timeout: number of seconds to wait for the next packet before raising a exc.PortTimeout.
         :return: the received packet.
         """
         pass

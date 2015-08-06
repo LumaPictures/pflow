@@ -123,6 +123,9 @@ class Component(object):
     ])
 
     def __init__(self, name):
+        """
+        :param name: unique name of this component instance within the graph.
+        """
         if not isinstance(name, basestring):
             raise ValueError('name must be a string')
 
@@ -197,7 +200,8 @@ class Component(object):
         """
         pass
 
-    @assert_component_state(ComponentState.TERMINATED, ComponentState.ERROR)
+    # @assert_component_state(ComponentState.TERMINATED,
+    #                         ComponentState.ERROR)
     def destroy(self):
         """
         Implementations can override this to call any cleanup code when the component
@@ -205,7 +209,8 @@ class Component(object):
         """
         self.log.debug('Destroyed')
 
-    @assert_not_component_state(ComponentState.TERMINATED, ComponentState.ERROR)
+    @assert_not_component_state(ComponentState.TERMINATED,
+                                ComponentState.ERROR)
     def create_packet(self, value=None):
         """
         Create a new packet and set self as owner.
@@ -219,10 +224,13 @@ class Component(object):
         self.owned_packet_count += 1
         return packet
 
-    @assert_not_component_state(ComponentState.TERMINATED, ComponentState.ERROR)
+    @assert_not_component_state(ComponentState.TERMINATED,
+                                ComponentState.ERROR)
     def drop_packet(self, packet):
         """
         Drop a Packet.
+
+        :param packet: the Packet to drop.
         """
         if not isinstance(packet, Packet):
             raise ValueError('packet must be a Packet')
@@ -245,7 +253,8 @@ class Component(object):
         return self.state in (ComponentState.SUSP_RECV,
                               ComponentState.SUSP_SEND)
 
-    @assert_not_component_state(ComponentState.TERMINATED, ComponentState.ERROR)
+    @assert_not_component_state(ComponentState.TERMINATED,
+                                ComponentState.ERROR)
     def terminate(self, ex=None):
         """
         Terminate execution for this component.
@@ -269,14 +278,14 @@ class Component(object):
     def suspend(self, seconds=None):
         """
         Yield execution to scheduler.
+        This may be used in place of time.sleep()
+
+        :param seconds: minimum number of seconds to sleep.
         """
         self.executor.suspend_thread(seconds)
 
     def __str__(self):
         return '%s(%s)' % (self.__class__.__name__, self.name)
-
-        # return ('Component(%s, inputs=%s, outputs=%s)' %
-        #         (self.name, self.inputs, self.outputs))
 
 
 class InitialPacketGenerator(Component):
@@ -348,7 +357,14 @@ class Graph(Component):
         """
         return all([c.is_terminated for c in cls.get_upstream(component)])
 
+    @assert_component_state(ComponentState.NOT_INITIALIZED)
     def add_component(self, component):
+        """
+        Add a component to the graph.
+
+        :param component: the Component to add.
+        :return: the added Component.
+        """
         if not isinstance(component, Component):
             raise ValueError('component must be a Component instance')
 
@@ -364,7 +380,14 @@ class Graph(Component):
         self.components.add(component)
         return component
 
+    @assert_component_state(ComponentState.NOT_INITIALIZED)
     def remove_component(self, component):
+        """
+        Remove a component from the graph.
+        Also disconnects its ports.
+
+        :param component: the Component to remove.
+        """
         if isinstance(component, basestring):
             component_name = component
             for c in self.components:
@@ -383,28 +406,58 @@ class Graph(Component):
 
         self.components.remove(component)
 
+    @assert_component_state(ComponentState.NOT_INITIALIZED)
     def set_initial_packet(self, port, value):
+        """
+        Adds an Initial Information Packet (IIP) to the InputPort of a Component.
+
+        :param port: the InputPort to add the IIP to.
+        :param value: the value to set on the IIP (will automatically be wrapped in a Packet).
+        :return: the InitialPacketGenerator component that gets created and attached to the port.
+        """
+        if not isinstance(port, InputPort):
+            raise ValueError('port must be an InputPort')
+
+        if isinstance(value, Packet):
+            raise ValueError('value can not be a Packet')
+
         iip = InitialPacketGenerator(value)
         self.connect(iip.outputs['OUT'], port)
+
         return iip
 
+    @assert_component_state(ComponentState.NOT_INITIALIZED)
     def unset_initial_packet(self, port):
+        """
+        Removes an Initial Information Packet (IIP) from the InputPort of a Component.
+
+        :param port: the InputPort to remove the IIP from.
+        """
         if not isinstance(port, InputPort):
-            raise ValueError('Can only unset_initial_packet() on an InputPort')
+            raise ValueError('port %s must be an InputPort' % port)
 
-        if port.is_connected():
-            iip_gen = port.source_port.component
-            self.remove_component(iip_gen)
+        if not port.is_connected():
+            raise ValueError('port %s has no IIP because it is disconnected' % port)
 
+        iip_gen = port.source_port.component
+        if not isinstance(iip_gen, InitialPacketGenerator):
+            raise ValueError('port %s is connected, but not to an IIP' % port)
+
+        self.remove_component(iip_gen)
+
+    @assert_component_state(ComponentState.NOT_INITIALIZED)
     def set_port_defaults(self, component):
         """
-        Create a default initial packet for all of the component's optional
+        Create a default initial packets on all of the component's optional
         unconnected ports.
+
+        :param component: the Component to set port defaults on.
         """
         for port in component.inputs:
             if port.optional and not port.is_connected():
                 self.set_initial_packet(port, port.default)
 
+    @assert_component_state(ComponentState.NOT_INITIALIZED)
     def connect(self, source_output_port, target_input_port):
         """
         Connect components by their ports.
@@ -431,14 +484,15 @@ class Graph(Component):
         source_output_port.target_port = target_input_port
         target_input_port.source_port = source_output_port
 
+    @assert_component_state(ComponentState.NOT_INITIALIZED)
     def disconnect(self, port):
         """
-        Disconnect component port.
-        Disconnecting an output will also disconnect the input, and vice versa.
+        Disconnect a Component's Port.
+        When you disconnect one end, the other end will be disconnected as well.
 
-        :param port: the port to disconnect (either input or output).
+        :param port: the Port to disconnect (either an InputPort or OutputPort).
         """
-        if port.is_connected():
+        if not port.is_connected():
             if isinstance(port, OutputPort):
                 log.debug('%s disconnected from %s' % (port, port.target_port))
                 port.target_port = None
@@ -480,6 +534,7 @@ class Graph(Component):
 
     # TODO: move all serializers to their own module / abstract class
 
+    @assert_component_state(ComponentState.NOT_INITIALIZED)
     def load_fbp_string(self, fbp_script):
         if not isinstance(fbp_script, basestring):
             raise ValueError('fbp_script must be a string')
@@ -488,6 +543,7 @@ class Graph(Component):
         #raise NotImplementedError
         pass
 
+    @assert_component_state(ComponentState.NOT_INITIALIZED)
     def load_fbp_file(self, file_path):
         if not isinstance(file_path, basestring):
             raise ValueError('file_path must be a string')
@@ -495,10 +551,12 @@ class Graph(Component):
         with open(file_path, 'r') as f:
             self.load_fbp_string(f.read())
 
+    @assert_component_state(ComponentState.NOT_INITIALIZED)
     def load_json_dict(self, json_dict):
         # TODO: parse json dict and build graph
         raise NotImplementedError
 
+    @assert_component_state(ComponentState.NOT_INITIALIZED)
     def load_json_file(self, file_path):
         if not isinstance(file_path, basestring):
             raise ValueError('file_path must be a string')

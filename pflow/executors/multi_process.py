@@ -18,8 +18,7 @@ except ImportError:
 
 from .base import GraphExecutor, NoopSerializer
 from ..core import ComponentState
-from ..exc import GraphExecutorError
-from ..port import Packet
+from .. import exc
 
 
 # TODO: update this, since it has fallen behind single_proces updates
@@ -118,25 +117,32 @@ class MultiProcessGraphExecutor(GraphExecutor):
     def is_running(self):
         return self._running
 
-    def send_port(self, component, port_name, packet):
+    def send_port(self, component, port_name, packet, timeout=None):
         self.log.debug('Sending packet to port %s.%s' % (component.name, port_name))
 
         q = self._get_outport_queue(component, port_name)
         component.state = ComponentState.SUSP_SEND
-        q.put(self._packet_serializer.serialize(packet))
-        component.state = ComponentState.ACTIVE
+
+        try:
+            q.put(self._packet_serializer.serialize(packet), timeout=timeout)
+            component.state = ComponentState.ACTIVE
+        except queue.Full:
+            # Send timed out
+            component.state = ComponentState.ACTIVE
+            raise exc.PortTimeout
 
     def receive_port(self, component, port_name, timeout=None):
-        # TODO: implement timeout
-        if timeout is not None:
-            raise NotImplementedError('timeout not implemented')
-
         self.log.debug('Receiving packet on port %s.%s' % (component.name, port_name))
 
         q = self._get_inport_queue(component, port_name)
         component.state = ComponentState.SUSP_RECV
-        serialized_packet = q.get()
-        component.state = ComponentState.ACTIVE
+        try:
+            serialized_packet = q.get()
+            component.state = ComponentState.ACTIVE
+        except queue.Full:
+            # Timed out
+            component.state = ComponentState.ACTIVE
+            raise exc.PortTimeout
 
         self.log.debug('Packet received on %s.%s: %s' % (component.name, port_name, serialized_packet))
         packet = self._packet_serializer.deserialize(serialized_packet)

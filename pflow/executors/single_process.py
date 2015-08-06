@@ -26,6 +26,7 @@ else:
                             sys=False,  # stdin, stdout, stderr
                             Event=False)
 
+import time
 import collections
 
 try:
@@ -76,7 +77,8 @@ class SingleProcessGraphExecutor(GraphExecutor):
                                                                   coroutine.exception.message))
 
             for c in self._coroutines.values():
-                c.terminate(ex=coroutine.exception)
+                if not c.is_terminated:
+                    c.terminate(ex=coroutine.exception)
 
         # Wire up error handler (so that exceptions aren't swallowed)
         for coroutine in self._coroutines.keys():
@@ -106,7 +108,7 @@ class SingleProcessGraphExecutor(GraphExecutor):
 
         return self._recv_queues[port.id]
 
-    def send_port(self, component, port_name, packet):
+    def send_port(self, component, port_name, packet, timeout=None):
         source_port = component.outputs[port_name]
         dest_port = source_port.target_port
         q = self._get_or_create_queue(dest_port)
@@ -116,16 +118,17 @@ class SingleProcessGraphExecutor(GraphExecutor):
         self.log.debug('Sending packet from %s to %s: %s' %
                        (source_port, dest_port, packet))
 
-        q.put(packet)
-        component.suspend()
-
-        component.state = ComponentState.ACTIVE
+        try:
+            # TODO: Make this call non-blocking
+            q.put(packet)
+            component.suspend()
+            component.state = ComponentState.ACTIVE
+        except queue.Full:
+            # Timed out
+            component.state = ComponentState.ACTIVE
+            raise exc.PortTimeout
 
     def receive_port(self, component, port_name, timeout=None):
-        # TODO: implement timeout
-        if timeout is not None:
-            raise NotImplementedError('timeout not implemented')
-
         source_port = component.inputs[port_name]
         if not source_port.is_open():
             return EndOfStream
@@ -134,6 +137,7 @@ class SingleProcessGraphExecutor(GraphExecutor):
         component.state = ComponentState.SUSP_RECV
 
         self.log.debug('%s is waiting for data on %s' % (component, source_port))
+        start_time = time.time()
         while not component.is_terminated:
             try:
                 packet = q.get(block=False)
@@ -141,6 +145,11 @@ class SingleProcessGraphExecutor(GraphExecutor):
                 component.state = ComponentState.ACTIVE
                 return packet
             except queue.Empty:
+                curr_time = time.time()
+                if timeout is not None and curr_time - start_time >= timeout:
+                    component.state = ComponentState.ACTIVE
+                    raise exc.PortTimeout
+
                 if self.graph.is_upstream_terminated(component):
                     # No more data left to receive_packet and upstream has terminated.
                     component.state = ComponentState.ACTIVE

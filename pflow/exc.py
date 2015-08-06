@@ -37,7 +37,8 @@ class PortClosedError(PortError):
     pass
 
 
-class PortReceiveTimeout(PortError):
+class PortTimeout(PortError):
     """
-    Timed out while waiting for a receive() on an InputPort.
+    Port communication timed out.
     """
+    pass

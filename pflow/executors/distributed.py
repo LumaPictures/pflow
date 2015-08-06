@@ -18,7 +18,10 @@ class DistributedGraphExecutor(GraphExecutor):
     def execute(self):
         raise NotImplementedError
 
-    def send_port(self, component, port_name, packet):
+    def is_running(self):
+        raise NotImplementedError
+
+    def send_port(self, component, port_name, packet, timeout=None):
         raise NotImplementedError
 
     def receive_port(self, component, port_name, timeout=None):
@@ -35,5 +38,3 @@ class DistributedGraphExecutor(GraphExecutor):
 
     def suspend_thread(self, seconds=None):
         raise NotImplementedError
-
-
