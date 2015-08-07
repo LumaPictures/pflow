@@ -3,14 +3,16 @@
 [![Build Status](https://travis-ci.org/Flushot/pflow.svg)](https://travis-ci.org/Flushot/pflow)
 [![Coverage Status](https://coveralls.io/repos/Flushot/pflow/badge.svg?branch=master&service=github)](https://coveralls.io/github/Flushot/pflow?branch=master)
 
-[ TODO: Improve documentation ]
-
-Python [flow-based programming](http://www.jpaulmorrison.com/fbp/) implementation that tries to remain as close
-to the "classic" approach as possible.
-
 **THIS PROJECT IS STILL IN ITS VERY EARLY STAGES**
 
-To quote J. Paul Morrison:
+## What is this?
+
+This is a Python implementation of the [flow-based programming](http://www.jpaulmorrison.com/fbp/) paradigm, which allows people to create programs as graphs. This means we no longer have to write code, but can visually design our programs in a drag-and-drop style, using pre-defined generalized black-box components.
+
+You can define data flow execution graphs ([DAGs](https://en.wikipedia.org/wiki/Directed_acyclic_graph)) where each process (node) is run as a parallel black box that processes input data and spits out something to send downstream. To design these graphs, you can use some freely available design tools such as [DrawFBP](https://github.com/jpaulm/drawfbp), [NoFlo UI](https://github.com/noflo/noflo-ui), or [Flowhub](https://flowhub.io/).
+
+To understand what this is all about, perhaps it's easier to quote [J. Paul Morrison](http://jpaulmorrison.com/), the inventor of flow-based programming:
+
 > In computer programming, Flow-Based Programming (FBP) is a programming paradigm that uses a "data factory" metaphor 
 for designing and building applications. FBP defines applications as networks of "black box" processes, which exchange 
 data across predefined connections by message passing, where the connections are specified externally to the processes. 
@@ -18,16 +20,6 @@ These black box processes can be reconnected endlessly to form different applica
 internally. FBP is thus naturally component-oriented.
 
 ![Flow-based programming example](./docs/fbp-example.jpg)
-
-
-## How is this useful?
-
-Drag-and-drop programming!
-
-You can define data flow execution graphs where each process (node) is run as a parallel black box. To define these
-graphs, you can use some freely available design tools such as [DrawFBP](https://github.com/jpaulm/drawfbp), 
-[NoFlo UI](https://github.com/noflo/noflo-ui), or [Flowhub](https://flowhub.io/).
-
 
 ## Quick Start
 
