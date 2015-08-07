@@ -181,5 +181,19 @@ class SingleProcessGraphExecutor(GraphExecutor):
         raise gevent.GreenletExit
 
     def suspend_thread(self, seconds=None):
+        if seconds is None or seconds <= 0:
+            # gevent fix, since anything <= 0 can cause other greenlets not to get scheduled.
+            # Here's the description from their recent v1.1 gevent.hub.sleep docstring:
+            #
+            # In the current implementation, a value of 0 (the default)
+            # means to yield execution to any other runnable greenlets, but
+            # this greenlet may be scheduled again before the event loop
+            # cycles (in an extreme case, a greenlet that repeatedly sleeps
+            # with 0 can prevent greenlets that are ready to do I/O from
+            # being scheduled for some (small) period of time); a value greater than
+            # 0, on the other hand, will delay running this greenlet until
+            # the next iteration of the loop.
+            seconds = 0.1
+
         # Yield control back to the gevent scheduler
         gevent.sleep(seconds)
