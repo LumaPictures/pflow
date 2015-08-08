@@ -2,7 +2,6 @@ from abc import ABCMeta, abstractmethod
 import logging
 import json
 import inspect
-import collections
 import functools
 
 try:
@@ -51,51 +50,49 @@ def assert_component_state(*allowed_states):
     :param allowed_states: allowed ComponentStates
     """
     def inner_fn(fn):
-        def assert_component_state_decorator(self, *args, **kwargs):
+        @functools.wraps(fn)
+        def wrapper(self, *args, **kwargs):
             if self.state not in allowed_states:
-                raise exc.ComponentStateError('%s.%s() called on component %s in unexpected state %s '
-                                              '(expecting one of: %s)' % (self.__class__.__name__,
-                                                                          fn.__name__,
-                                                                          self.name,
-                                                                          self.state,
-                                                                          ', '.join(map(str, allowed_states))))
+                raise exc.ComponentStateError(
+                    '{}.{}() called on component {} in unexpected state {} '
+                    '(expecting one of: {})'.format(
+                        self.__class__.__name__, fn.__name__, self.name,
+                        self.state, ', '.join(str(x) for x in allowed_states)))
             return fn(self, *args, **kwargs)
 
-        return functools.wraps(fn)(assert_component_state_decorator)
+        return wrapper
 
     return inner_fn
 
 
 def assert_not_component_state(*disallowed_states):
     """
-    Decorator that asserts the Component is not in one of the given disallowed_states
-    before the method it wraps can be called.
+    Decorator that asserts the Component is not in one of the given
+    `disallowed_states` before the method it wraps can be called.
 
     :param disallowed_states: disallowed ComponentStates
     """
-    def inner_fn(fn):
-        def assert_not_component_state_decorator(self, *args, **kwargs):
-            if self.state in disallowed_states:
-                raise exc.ComponentStateError('%s.%s() called on component %s in unexpected state %s '
-                                              '(not expecting one of: %s)' % (self.__class__.__name__,
-                                                                              fn.__name__,
-                                                                              self.name,
-                                                                              self.state,
-                                                                              ', '.join(map(str, disallowed_states))))
-            return fn(self, *args, **kwargs)
+    allowed_states = set(ComponentState).difference(disallowed_states)
+    return assert_component_state(allowed_states)
 
-        return functools.wraps(fn)(assert_not_component_state_decorator)
-
-    return inner_fn
 
 
 def keepalive(fn):
     """
-    Decorator that tells the runtime to only invoke the component's run() method until it explicitly terminate()s
-    its own execution.
+    Decorator that tells the runtime to invoke the component's run()
+    for each incoming packet.
     """
     if fn.func_name != 'run':
-        raise ValueError('The run_once decorator was only intended for the Component.run() method')
+        raise ValueError('The keepalive decorator was only intended for the '
+                         'Component.run() method')
+
+    # FIXME: remove keepalive knowledge from the executor and use something like this:
+    # @functools.wraps(fn)
+    # def wrapper(self):
+    #     while not self.is_terminated:
+    #         fn(self)
+    # return wrapper
+    # See more notes in executors.base.GraphExecutor._create_component_runner
 
     fn._component_keepalive = True
     return fn
@@ -113,13 +110,15 @@ class Component(object):
     # Valid state transitions for components.
     #
     # See ../docs/states.graphml for how this is visually represented.
-    # Please keep this list of edges in sync with the graphml and README.md docs!
+    # Please keep this list of edges in sync with the graphml and README.md
+    # docs!
     _valid_transitions = frozenset([
         (ComponentState.NOT_INITIALIZED, ComponentState.INITIALIZED),
 
         (ComponentState.INITIALIZED, ComponentState.ACTIVE),
-        (ComponentState.INITIALIZED, ComponentState.TERMINATED),  # This may happen when the graph shuts down and
-                                                                  # a component hasn't been run yet.
+        # This may happen when the graph shuts down and a component hasn't been
+        # run yet:
+        (ComponentState.INITIALIZED, ComponentState.TERMINATED),
 
         (ComponentState.ACTIVE, ComponentState.SUSP_SEND),
         (ComponentState.ACTIVE, ComponentState.SUSP_RECV),
@@ -163,7 +162,8 @@ class Component(object):
     @state.setter
     def state(self, new_state):
         if not isinstance(new_state, ComponentState):
-            raise ValueError('new_state must be a value from the ComponentState enum')
+            raise ValueError('new_state must be a value from the '
+                             'ComponentState enum')
 
         old_state = self._state
 
@@ -172,27 +172,32 @@ class Component(object):
 
         # Ensure state transition is a valid one.
         if (old_state, new_state) not in self._valid_transitions:
-            raise exc.ComponentStateError('Invalid state transition for %s: %s -> %s' %
-                                          (self, old_state.value, new_state.value))
+            raise exc.ComponentStateError(
+                'Invalid state transition for {}: {} -> {}'.format(
+                    self, old_state.value, new_state.value))
 
         self._state = new_state
 
-        self.log.debug('State transitioned from %s -> %s' % (old_state.value, new_state.value))
+        self.log.debug('State transitioned from {} -> {}'.format(
+            old_state.value, new_state.value))
 
-        # If supported by interpreter, show the caller to this property method to determine
-        # where the state was changed from.
+        # If supported by interpreter, show the caller to this property method
+        # to determine where the state was changed from.
         curr_frame = inspect.currentframe()
         if curr_frame is not None:
             # Python interpreter has stack support.
             frame_limit = 3
-            caller_frames = inspect.getouterframes(curr_frame, 2)[1:frame_limit + 1]
+            frames = inspect.getouterframes(curr_frame, 2)
+            caller_frames = frames[1:frame_limit + 1]
             if len(caller_frames) > 1:
                 # (frame, filename, lineno, function, code_context, index)
                 indent = '\t' * 4
-                caller_stack = ('\n' + indent).join(['%s() in %s:%d' % (fr[3], fr[1], fr[2])
-                                                     for fr in caller_frames])
-                self.log.debug('State was changed by (last %d frames):\n%s%s' %
-                               (frame_limit, indent, caller_stack))
+                caller_stack = ('\n' + indent).join(
+                    '{}() in {}:{:d}'.format(fr[3], fr[1], fr[2])
+                    for fr in caller_frames)
+                self.log.debug('State was changed by (last {:d} frames):\n'
+                               '{}{}'.format(frame_limit, indent,
+                                             caller_stack))
 
         # TODO: Fire a transition event
 
@@ -208,7 +213,7 @@ class Component(object):
     @assert_component_state(ComponentState.INITIALIZED)
     def run(self):
         """
-        This method is called any time the port is open and a new Packet arrives.
+        This is where all work is performed during component execution.
         """
         pass
 
@@ -216,8 +221,9 @@ class Component(object):
     #                         ComponentState.ERROR)
     def destroy(self):
         """
-        Implementations can override this to call any cleanup code when the component
-        has transitioned to a TERMINATED state and is about to be destroyed.
+        Implementations can override this to call any cleanup code when the
+        component has transitioned to a TERMINATED state and is about to be
+        destroyed.
         """
         self.log.debug('Destroyed')
 
@@ -227,8 +233,15 @@ class Component(object):
         """
         Create a new packet and set self as owner.
 
-        :param value: initial value for the packet.
-        :return: a new Packet.
+        Parameters
+        ----------
+        value : object
+            value for the packet.
+
+        Returns
+        -------
+        packet : ``Packet``
+            newly created packet
         """
         packet = Packet(value)
         packet.owner = self
@@ -242,24 +255,38 @@ class Component(object):
         """
         Drop a Packet.
 
-        :param packet: the Packet to drop.
+        Parameters
+        ----------
+        packet : ``Packet``
+            the Packet to drop.
         """
         if not isinstance(packet, Packet):
             raise ValueError('packet must be a Packet')
 
+        # FIXME: shouldn't this be: packet.owner.owned_packet_count -= 1?
         if packet.owner == self:
             self.owned_packet_count -= 1
 
         del packet
 
+    # FIXME: This would be clearer as a method (properties should be reserved for attribute-like values)
     @property
     def is_terminated(self):
         """
         Has this component been terminated?
+
+        Returns
+        -------
+        is_terminated : bool
+            whether the component has been terminated.
         """
         return self.state in (ComponentState.TERMINATED,
                               ComponentState.ERROR)
 
+    def is_alive(self):
+        return not self.is_terminated
+
+    # FIXME: This would be clearer as a method (properties should be reserved for attribute-like values)
     @property
     def is_suspended(self):
         return self.state in (ComponentState.SUSP_RECV,
@@ -277,10 +304,11 @@ class Component(object):
 
         if ex is not None:
             if not isinstance(ex, Exception):
-                raise ValueError('ex must be an Exception')
+                raise ValueError('If an exception is passed, it must be an'
+                                 'instance of Exception')
 
-            self.log.error('Abnormally terminating because of %s...' %
-                           ex.__class__.__name__)
+            self.log.error('Abnormally terminating because of {}...'.format(
+                           ex.__class__.__name__))
             self.state = ComponentState.ERROR
         else:
             self.state = ComponentState.TERMINATED
@@ -290,14 +318,17 @@ class Component(object):
     def suspend(self, seconds=None):
         """
         Yield execution to scheduler.
-        This may be used in place of time.sleep()
+        This may be used in place of `time.sleep()`
 
-        :param seconds: minimum number of seconds to sleep.
+        Parameters
+        ----------
+        seconds : float
+            minimum number of seconds to sleep. (optional)
         """
         self.executor.suspend_thread(seconds)
 
     def __str__(self):
-        return '%s(%s)' % (self.__class__.__name__, self.name)
+        return '{}({!r})'.format(self.__class__.__name__, self.name)
 
 
 class InitialPacketGenerator(Component):
@@ -305,13 +336,13 @@ class InitialPacketGenerator(Component):
     An initial packet (IIP) generator that is connected to an input port
     of a component.
 
-    This should have no input ports, a single output port, and is used to
-    make the logic easier.
+    This should have no input ports, a single output port, and generates a
+    single packet before terminating.
     """
     def __init__(self, value):
         self.value = value
-        super(InitialPacketGenerator, self).__init__('IIP_GEN_%s' %
-                                                     utils.random_id())
+        super(InitialPacketGenerator, self).__init__(
+            'IIP_GEN_{}'.format(utils.random_id()))
 
     def initialize(self):
         self.outputs.add('OUT')
@@ -336,6 +367,16 @@ class Graph(Component):
     def get_upstream(cls, component):
         """
         Immediate upstream components.
+
+        Parameters
+        ----------
+        component : ``Component``
+            the Component to check.
+
+        Returns
+        -------
+        components : the upstream components
+            set of ``Component``
         """
         upstream = set()
 
@@ -349,6 +390,16 @@ class Graph(Component):
     def get_downstream(cls, component):
         """
         Immediate downstream components.
+
+        Parameters
+        ----------
+        component : ``Component``
+            the Component to check.
+
+        Returns
+        -------
+        components : the downstream components
+            set of ``Component``
         """
         downstream = set()
 
@@ -363,18 +414,32 @@ class Graph(Component):
         """
         Are all of a component's upstream components terminated?
 
-        :param component: the component to check.
-        :return: whether or not the upstream components have been terminated.
+        Parameters
+        ----------
+        component : ``Component``
+            the Component to check.
+
+        Returns
+        -------
+        is_terminated : bool
+            whether or not the upstream components have been terminated.
         """
-        return all([c.is_terminated for c in cls.get_upstream(component)])
+        return all(c.is_terminated for c in cls.get_upstream(component))
 
     @assert_component_state(ComponentState.NOT_INITIALIZED)
     def add_component(self, component):
         """
         Add a component to the graph.
 
-        :param component: the Component to add.
-        :return: the added Component.
+        Parameters
+        ----------
+        component : ``Component``
+            the Component to add.
+
+        Returns
+        -------
+        component : ``Component``
+            the added Component.
         """
         if not isinstance(component, Component):
             raise ValueError('component must be a Component instance')
@@ -386,7 +451,8 @@ class Graph(Component):
         # Unique name?
         used_names = utils.pluck(self.components, 'name')
         if component.name in used_names:
-            raise ValueError('Component name "%s" has already been used in this graph' % component.name)
+            raise ValueError('Component name "{}" has already been used in '
+                             'this graph'.format(component.name))
 
         self.components.add(component)
         return component
@@ -397,7 +463,10 @@ class Graph(Component):
         Remove a component from the graph.
         Also disconnects its ports.
 
-        :param component: the Component to remove.
+        Parameters
+        ----------
+        component : ``Component``
+            the Component to remove.
         """
         if isinstance(component, basestring):
             component_name = component
@@ -407,7 +476,8 @@ class Graph(Component):
                     break
 
         if not isinstance(component, Component):
-            raise ValueError('component must either be a Component object or the name of a component to remove')
+            raise ValueError('component must either be a Component object or '
+                             'the name of a component to remove')
 
         for outport in component.outputs:
             self.disconnect(outport)
@@ -422,9 +492,18 @@ class Graph(Component):
         """
         Adds an Initial Information Packet (IIP) to the InputPort of a Component.
 
-        :param port: the InputPort to add the IIP to.
-        :param value: the value to set on the IIP (will automatically be wrapped in a Packet).
-        :return: the InitialPacketGenerator component that gets created and attached to the port.
+        Parameters
+        ----------
+        port : ``port.InputPort``
+            the input port to add the IIP to.
+        value : object
+            the value to set on the IIP (will automatically be wrapped in a
+            Packet).
+
+        Returns
+        -------
+        component : ``core.InitialPacketGenerator``
+            the component that gets created and attached to the port.
         """
         if not isinstance(port, InputPort):
             raise ValueError('port must be an InputPort')
@@ -440,19 +519,25 @@ class Graph(Component):
     @assert_component_state(ComponentState.NOT_INITIALIZED)
     def unset_initial_packet(self, port):
         """
-        Removes an Initial Information Packet (IIP) from the InputPort of a Component.
+        Removes an Initial Information Packet (IIP) from the InputPort of a
+        Component.
 
-        :param port: the InputPort to remove the IIP from.
+        Parameters
+        ----------
+        port : ``port.InputPort``
+            the input port to remove the IIP from.
         """
         if not isinstance(port, InputPort):
-            raise ValueError('port %s must be an InputPort' % port)
+            raise ValueError('port {} must be an InputPort'.format(port))
 
         if not port.is_connected():
-            raise ValueError('port %s has no IIP because it is disconnected' % port)
+            raise ValueError('port {} has no IIP because it is '
+                             'disconnected'.format(port))
 
         iip_gen = port.source_port.component
         if not isinstance(iip_gen, InitialPacketGenerator):
-            raise ValueError('port %s is connected, but not to an IIP' % port)
+            raise ValueError('port {} is connected, but not to '
+                             'an IIP'.format(port))
 
         self.remove_component(iip_gen)
 
@@ -462,7 +547,10 @@ class Graph(Component):
         Create a default initial packets on all of the component's optional
         unconnected ports.
 
-        :param component: the Component to set port defaults on.
+        Parameters
+        ----------
+        component : ``Component``
+            the Component to set port defaults on.
         """
         for port in component.inputs:
             if port.optional and not port.is_connected():
@@ -473,8 +561,12 @@ class Graph(Component):
         """
         Connect components by their ports.
 
-        :param source_output_port: the output port on the source component.
-        :param target_input_port: the input port on the target component.
+        Parameters
+        ----------
+        source_output_port : ``port.OutputPort``
+            the output port on the source component.
+        target_input_port : ``port.InputPort``
+            the input port on the target component.
         """
         if not isinstance(source_output_port, (OutputPort, ArrayOutputPort)):
             raise ValueError('source_output_port must be an output port')
@@ -486,7 +578,8 @@ class Graph(Component):
             raise exc.PortError('target_input_port is already connected to '
                                 'another source')
 
-        log.debug('%s connected to %s' % (source_output_port, target_input_port))
+        log.debug('{} connected to {}'.format(source_output_port,
+                                              target_input_port))
 
         self.add_component(source_output_port.component)
         self.add_component(target_input_port.component)
@@ -499,9 +592,13 @@ class Graph(Component):
     def disconnect(self, port):
         """
         Disconnect a Component's Port.
-        When you disconnect one end, the other end will be disconnected as well.
+        When you disconnect one end, the other end will be disconnected as
+        well.
 
-        :param port: the Port to disconnect (either an InputPort or OutputPort).
+        Parameters
+        ----------
+        port : ``port.Port``
+            the port to disconnect.
         """
         if not port.is_connected():
             if isinstance(port, OutputPort):
@@ -534,12 +631,18 @@ class Graph(Component):
         return self_starters
 
     def run(self):
-        raise RuntimeError('Instead of calling Graph.run(), please use a GraphRuntime to run this Graph')
+        raise RuntimeError('Instead of calling Graph.run(), please use a '
+                           'GraphRuntime to run this Graph')
 
     @property
     def is_terminated(self):
         """
         Has this graph been terminated?
+
+        Returns
+        -------
+        is_terminated : bool
+            whether the graph has terminated.
         """
         return all([component.is_terminated for component in self.components])
 
@@ -551,7 +654,7 @@ class Graph(Component):
             raise ValueError('fbp_script must be a string')
 
         # TODO: parse fbp string and build graph
-        #raise NotImplementedError
+        # raise NotImplementedError
         pass
 
     @assert_component_state(ComponentState.NOT_INITIALIZED)
@@ -601,8 +704,8 @@ class Graph(Component):
                     graph.add_node(component.name)
 
                 node_attribs = {
-                    'label': '%s\n(%s)' % (component.name,
-                                           component.__class__.__name__),
+                    'label': '{}\n({})'.format(component.name,
+                                               component.__class__.__name__),
                     'description': (component.__class__.__doc__ or '')
                 }
 
@@ -624,8 +727,8 @@ class Graph(Component):
                             next_components.add(output.target_port.component)
 
                             edge_attribs = {
-                                'label': '%s -> %s' % (output.name,
-                                                       output.target_port.name),
+                                'label': '{} -> {}'.format(
+                                    output.name, output.target_port.name),
                                 'description': (output.description or '')
                             }
 

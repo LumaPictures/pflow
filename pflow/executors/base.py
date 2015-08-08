@@ -7,8 +7,9 @@ from .. import exc
 
 class GraphExecutor(object):
     """
-    Executors are responsible for running a single graph: starting processes, scheduling execution,
-    and forwarding messages on Connections between Processes.
+    Executors are responsible for running a single graph: starting processes,
+    scheduling execution, and forwarding messages on Connections between
+    Processes.
     """
     __metaclass__ = ABCMeta
 
@@ -31,21 +32,41 @@ class GraphExecutor(object):
         """
         Creates a run loop for a component thread.
 
-        :param component: the component to create the runner for.
-        :return: loop function that gets executed by the thread.
+        Parameters
+        ----------
+        component : ``core.Component``
+            the component to create the runner for.
+
+        Returns
+        -------
+        runner : callable
+            loop function that gets executed by the thread.
         """
         def component_loop(in_queues, out_queues):
             component._in_queues = in_queues
             component._out_queues = out_queues
 
             try:
-                # Component should always be in a INITIALIZED state when first running!
+                # Component should always be in a INITIALIZED state when first
+                # running!
                 if component.state != ComponentState.INITIALIZED:
-                    raise exc.ComponentStateError('%s state is %s, but expected INITIALIZED' % (component,
-                                                                                                component.state))
+                    raise exc.ComponentStateError(
+                        component,
+                        'state is {}, but expected INITIALIZED'.format(
+                            component.state))
 
+                # FIXME: we should transition to the expectation that
+                # all run() funcs contain their own while loop (see the
+                # keepalive decorator). The code below could be simplified to
+                # just this:
+                # component.state = ComponentState.ACTIVE
+                # component.run()
+                # component.terminate()
+
+                # --- begin code in question ---
                 run_func = component.run
-                keepalive = (hasattr(run_func, '_component_keepalive') and run_func._component_keepalive)
+                keepalive = (hasattr(run_func, '_component_keepalive') and
+                             run_func._component_keepalive)
 
                 component.state = ComponentState.ACTIVE
                 while not component.is_terminated:
@@ -59,6 +80,7 @@ class GraphExecutor(object):
 
                     if not keepalive:
                         component.terminate()
+                # --- end code in question ---
 
             finally:
                 component.destroy()
@@ -120,10 +142,17 @@ class GraphExecutor(object):
         """
         Sends a packet on a component's output port.
 
-        :param component: the component the packet is being sent from.
-        :param port_name: the name of the component's output port.
-        :param packet: the packet to send.
-        :param timeout: number of seconds to wait for the next packet before raising a exc.PortTimeout.
+        Parameters
+        ----------
+        component : ``core.Component``
+            the component the packet is being sent from.
+        port_name : str
+            the name of the component's output port.
+        packet : ``port.Packet``
+            the packet to send.
+        timeout : float
+            number of seconds to wait to send the next packet before raising a
+            `exc.PortTimeout`. (optional)
         """
         pass
 
@@ -132,10 +161,20 @@ class GraphExecutor(object):
         """
         Receives a packet from a component's input port.
 
-        :param component: the component the packet is being received for.
-        :param port_name: the name of the component's input port.
-        :param timeout: number of seconds to wait for the next packet before raising a exc.PortTimeout.
-        :return: the received packet.
+        Parameters
+        ----------
+        component : ``core.Component``
+            the component the packet is being received from.
+        port_name : str
+            the name of the component's input port.
+        timeout : float
+            number of seconds to wait to receive the packet before raising a
+            `exc.PortTimeout`. (optional)
+
+        Returns
+        -------
+        packet : ``port.Packet``
+            the received packet.
         """
         pass
 
@@ -144,8 +183,12 @@ class GraphExecutor(object):
         """
         Closes a component's input port.
 
-        :param component: the component who's input port should be closed.
-        :param port_name: the name of the component's input port to close.
+        Parameters
+        ----------
+        component : ``core.Component``
+            the component who's input port should be closed.
+        port_name : str
+            the name of the component's input port to close.
         """
         pass
 
@@ -154,8 +197,12 @@ class GraphExecutor(object):
         """
         Closes a component's output port.
 
-        :param component: the component who's output port should be closed.
-        :param port_name: the name of the component's output port to close.
+        Parameters
+        ----------
+        component : ``core.Component``
+            the component who's output port should be closed.
+        port_name : str
+            the name of the component's output port to close.
         """
         pass
 

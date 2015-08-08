@@ -44,10 +44,12 @@ from .. import exc
 
 class SingleProcessGraphExecutor(GraphExecutor):
     """
-    Executes a graph in a single process, where each component is run in its own gevent coroutine.
+    Executes a graph in a single process, where each component is run in its
+    own gevent coroutine.
 
-    This low-overhead runtime is useful in environments that are hostile to multiprocessing/threading,
-    or when components are mostly I/O bound (i.e. don't need process parallelization).
+    This low-overhead runtime is useful in environments that are hostile to
+    multiprocessing/threading, or when components are mostly I/O bound (i.e.
+    don't need process parallelization).
     """
     def __init__(self, graph):
         super(SingleProcessGraphExecutor, self).__init__(graph)
@@ -57,14 +59,15 @@ class SingleProcessGraphExecutor(GraphExecutor):
 
     def execute(self):
         self._running = True
-        self.log.debug('Executing %s' % self.graph)
+        self.log.debug('Executing {}'.format(self.graph))
 
         self._recv_queues = collections.defaultdict(queue.Queue)
-        self._coroutines = dict([(gevent.spawn(self._create_component_runner(component),
-                                               None,   # in_queues
-                                               None),  # out_queues
-                                  component)
-                                 for component in self.graph.components])
+        self._coroutines = dict(
+            [(gevent.spawn(self._create_component_runner(comp),
+                           None,   # in_queues
+                           None),  # out_queues
+              comp) for comp in self.graph.components]
+        )
 
         def thread_error_handler(coroutine):
             """
@@ -72,9 +75,9 @@ class SingleProcessGraphExecutor(GraphExecutor):
             This should terminate execution of all other coroutines.
             """
             component = self._coroutines[coroutine]
-            self.log.error('Component "%s" failed with %s: %s' % (component.name,
-                                                                  coroutine.exception.__class__.__name__,
-                                                                  coroutine.exception.message))
+            self.log.error('Component "{}" failed with {}: {}'.format(
+                component.name, coroutine.exception.__class__.__name__,
+                coroutine.exception.message))
 
             for c in self._coroutines.values():
                 if not c.is_terminated:
@@ -115,8 +118,8 @@ class SingleProcessGraphExecutor(GraphExecutor):
 
         component.state = ComponentState.SUSP_SEND
 
-        self.log.debug('Sending packet from %s to %s: %s' %
-                       (source_port, dest_port, packet))
+        self.log.debug('Sending packet from {} to {}: {}'.format(
+                       source_port, dest_port, packet))
 
         try:
             # TODO: Make this call non-blocking
@@ -136,12 +139,14 @@ class SingleProcessGraphExecutor(GraphExecutor):
         q = self._get_or_create_queue(source_port)
         component.state = ComponentState.SUSP_RECV
 
-        self.log.debug('%s is waiting for data on %s' % (component, source_port))
+        self.log.debug('{} is waiting for data on {}'.format(component,
+                                                             source_port))
         start_time = time.time()
         while not component.is_terminated:
             try:
                 packet = q.get(block=False)
-                self.log.debug('%s received packet on %s: %s' % (component, source_port, packet))
+                self.log.debug('{} received packet on {}: {}'.format(
+                    component, source_port, packet))
                 component.state = ComponentState.ACTIVE
                 return packet
             except queue.Empty:
@@ -151,7 +156,8 @@ class SingleProcessGraphExecutor(GraphExecutor):
                     raise exc.PortTimeout
 
                 if self.graph.is_upstream_terminated(component):
-                    # No more data left to receive_packet and upstream has terminated.
+                    # No more data left to receive_packet and upstream has
+                    # terminated.
                     component.state = ComponentState.ACTIVE
 
                     if source_port.is_open():
@@ -164,14 +170,16 @@ class SingleProcessGraphExecutor(GraphExecutor):
                     component.suspend()
 
     def close_input_port(self, component, port_name):
-        self.log.debug('Closing input port %s.%s' % (component.name, port_name))
+        self.log.debug('Closing input port {}.{}'.format(component.name,
+                                                         port_name))
 
         port_id = component.inputs[port_name].id
         if port_id in self._recv_queues:
             del self._recv_queues[port_id]
 
     def close_output_port(self, component, port_name):
-        self.log.debug('Closing output port %s.%s' % (component.name, port_name))
+        self.log.debug('Closing output port {}.{}'.format(component.name,
+                                                          port_name))
 
         port_id = component.outputs[port_name].id
         if port_id in self._recv_queues:
@@ -182,16 +190,17 @@ class SingleProcessGraphExecutor(GraphExecutor):
 
     def suspend_thread(self, seconds=None):
         if seconds is None or seconds <= 0:
-            # gevent fix, since anything <= 0 can cause other greenlets not to get scheduled.
-            # Here's the description from their recent v1.1 gevent.hub.sleep docstring:
+            # gevent fix, since anything <= 0 can cause other greenlets not to
+            # get scheduled. Here's the description from their recent v1.1
+            # gevent.hub.sleep docstring:
             #
             # In the current implementation, a value of 0 (the default)
             # means to yield execution to any other runnable greenlets, but
             # this greenlet may be scheduled again before the event loop
             # cycles (in an extreme case, a greenlet that repeatedly sleeps
             # with 0 can prevent greenlets that are ready to do I/O from
-            # being scheduled for some (small) period of time); a value greater than
-            # 0, on the other hand, will delay running this greenlet until
+            # being scheduled for some (small) period of time); a value greater
+            # than 0, on the other hand, will delay running this greenlet until
             # the next iteration of the loop.
             seconds = 0.1
 

@@ -24,11 +24,11 @@ from .. import exc
 # TODO: update this, since it has fallen behind single_proces updates
 class MultiProcessGraphExecutor(GraphExecutor):
     """
-    Executes a graph in parallel using multiple processes, where each component is run in
-    its own process.
+    Executes a graph in parallel using multiple processes, where each component
+    is run in its own process.
 
-    This runtime is useful for work that needs to take advantage of multicore execution
-    and is best suited for components that may tend to be CPU bound.
+    This runtime is useful for work that needs to take advantage of multicore
+    execution and is best suited for components that may tend to be CPU bound.
     """
     def __init__(self, graph):
         super(MultiProcessGraphExecutor, self).__init__(graph)
@@ -39,8 +39,8 @@ class MultiProcessGraphExecutor(GraphExecutor):
 
     def _create_wrapped_runner(self, component):
         """
-        Wraps the runner so that it shuts down all components when process raises
-        an exception.
+        Wraps the runner so that it shuts down all components when process
+        raises an exception.
 
         :param component:
         :return:
@@ -139,7 +139,7 @@ class MultiProcessGraphExecutor(GraphExecutor):
         try:
             serialized_packet = q.get()
             component.state = ComponentState.ACTIVE
-        except queue.Full:
+        except queue.Full as err:
             # Timed out
             component.state = ComponentState.ACTIVE
             raise exc.PortTimeout

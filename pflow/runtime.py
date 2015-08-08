@@ -25,15 +25,18 @@ log = logging.getLogger(__name__)
 class Runtime(object):
     """
     Manages components, graphs, and executors.
+
+    Together with `RuntimeApplication`, this implements the Flow-based
+    Programming Network Protocol.
     """
-    def __init__(self):
+    def __init__(self, executor_class=SingleProcessGraphExecutor):
         self.log = logging.getLogger('%s.%s' % (self.__class__.__module__,
                                                 self.__class__.__name__))
 
         self._components = {}  # Component metadata, keyed by component name
         self._graphs = {}  # Graph instances, keyed by graph ID
         self._executors = {}  # GraphExecutor instances, keyed by graph ID
-
+        self.executor_class = executor_class
         self.log.debug('Initialized runtime!')
 
     @property
@@ -52,14 +55,16 @@ class Runtime(object):
         :param overwrite:
         """
         if not issubclass(component_class, core.Component):
-            raise ValueError('component_class must be a class that inherits from Component')
+            raise ValueError('component_class must be a class that inherits '
+                             'from Component')
 
         collection = component_class.__module__
         normalized_name = '{0}/{1}'.format(component_class.__module__,
                                            component_class.__name__)
 
         if normalized_name in self._components and not overwrite:
-            raise ValueError("Component {0} already registered".format(normalized_name))
+            raise ValueError("Component {0} already registered".format(
+                normalized_name))
 
         self.log.debug('Registering component: {0}'.format(normalized_name))
 
@@ -79,9 +84,11 @@ class Runtime(object):
             module = __import__(module)
 
         if not inspect.ismodule(module):
-            raise ValueError('module must be either a module or the name of a module')
+            raise ValueError('module must be either a module or the name of a '
+                             'module')
 
-        self.log.debug('Registering module: %s' % module.__name__)
+        self.log.debug('Registering components in module: {}'.format(
+            module.__name__))
 
         registered = 0
         for obj_name in dir(module):
@@ -95,7 +102,8 @@ class Runtime(object):
                 registered += 1
 
         if registered == 0:
-            self.log.warn('No components were found in module: %s' % module.__name__)
+            self.log.warn('No components were found in module: {}'.format(
+                module.__name__))
 
     @classmethod
     def _create_component_spec(cls, component_class):
@@ -141,19 +149,19 @@ class Runtime(object):
         """
         Execute a graph.
         """
-        self.log.debug('Graph %s: Starting execution' % graph_id)
+        self.log.debug('Graph {}: Starting execution'.format(graph_id))
 
         graph = self._graphs[graph_id]
 
         if graph_id not in self._executors:
             # Create executor
-            self.log.info('Creating executor for graph %s...' % graph_id)
-            executor = self._executors[graph_id] = SingleProcessGraphExecutor(graph)
+            self.log.info('Creating executor for graph {}...'.format(graph_id))
+            executor = self._executors[graph_id] = self.executor_class(graph)
         else:
             executor = self._executors[graph_id]
 
         if executor.is_running():
-            raise ValueError('Graph %s is already started' % graph_id)
+            raise ValueError('Graph {} is already started'.format(graph_id))
 
         gevent.spawn(executor.execute)
         # TODO: send 'started' message back
@@ -162,15 +170,26 @@ class Runtime(object):
         """
         Stop executing a graph.
         """
-        self.log.debug('Graph %s: Stopping execution' % graph_id)
+        self.log.debug('Graph {}: Stopping execution'.format(graph_id))
         if graph_id not in self._executors:
-            raise ValueError('Invalid graph: %s' % graph_id)
+            raise ValueError('Invalid graph: {}'.format(graph_id))
 
         executor = self._executors[graph_id]
         executor.stop()
         del self._executors[graph_id]
 
     def _create_or_get_graph(self, graph_id):
+        """
+        Parameters
+        ----------
+        graph_id : str
+            unique identifier for the graph to create or get
+
+        Returns
+        -------
+        graph : ``core.Graph``
+            the graph object.
+        """
         if graph_id not in self._graphs:
             self._graphs[graph_id] = core.Graph(graph_id)
 
@@ -185,7 +204,7 @@ class Runtime(object):
         """
         Create a new graph.
         """
-        self.log.debug('Graph %s: Initializing' % graph_id)
+        self.log.debug('Graph {}: Initializing'.format(graph_id))
         self._graphs[graph_id] = core.Graph(graph_id)
 
     def add_node(self, graph_id, node_id, component_id):
@@ -194,7 +213,8 @@ class Runtime(object):
         """
         # Normally you'd instantiate the component here,
         # we just store the name
-        self.log.debug('Graph %s: Adding node %s(%s)' % (graph_id, component_id, node_id))
+        self.log.debug('Graph {}: Adding node {}({})'.format(
+            graph_id, component_id, node_id))
 
         graph = self._create_or_get_graph(graph_id)
 
@@ -206,7 +226,8 @@ class Runtime(object):
         """
         Destroy component instance.
         """
-        self.log.debug('Graph %s: Removing node %s' % (graph_id, node_id))
+        self.log.debug('Graph {}: Removing node {}'.format(
+            graph_id, node_id))
 
         graph = self._create_or_get_graph(graph_id)
         graph.remove_component(node_id)
@@ -215,7 +236,8 @@ class Runtime(object):
         """
         Connect ports between components.
         """
-        self.log.debug('Graph %s: Connecting ports: %s -> %s' % (graph_id, src, tgt))
+        self.log.debug('Graph {}: Connecting ports: {} -> {}'.format(
+            graph_id, src, tgt))
 
         graph = self._graphs[graph_id]
 
@@ -231,7 +253,8 @@ class Runtime(object):
         """
         Disconnect ports between components.
         """
-        self.log.debug('Graph %s: Disconnecting ports: %s -> %s' % (graph_id, src, tgt))
+        self.log.debug('Graph {}: Disconnecting ports: {} -> {}'.format(
+            graph_id, src, tgt))
 
         graph = self._graphs[graph_id]
 
@@ -249,7 +272,8 @@ class Runtime(object):
         """
         Set the inital packet for a component inport.
         """
-        self.log.info('Graph %s: Setting IIP to "%s" on port %s' % (graph_id, data, src))
+        self.log.info('Graph {}: Setting IIP to {!r} on port {}'.format(
+            graph_id, data, src))
 
         graph = self._graphs[graph_id]
 
@@ -264,7 +288,8 @@ class Runtime(object):
         """
         Remove the initial packet for a component inport.
         """
-        self.log.debug('Graph %s: Removing IIP from port %s' % (graph_id, src))
+        self.log.debug('Graph {}: Removing IIP from port {}'.format(
+            graph_id, src))
 
         graph = self._graphs[graph_id]
 
@@ -276,6 +301,7 @@ class Runtime(object):
         graph.unset_initial_packet(target_port)
 
 
+# FIXME: why wrap this class in a function?  add the runtime as an arg to RuntimeApplication.__init__
 def create_websocket_application(runtime):
     class RuntimeApplication(geventwebsocket.WebSocketApplication):
         """
@@ -321,7 +347,7 @@ def create_websocket_application(runtime):
             try:
                 handler = dispatch[m.get('protocol')]
             except KeyError:
-                self.log.warn("Subprotocol '%s' not supported" % p)
+                self.log.warn("Subprotocol '{}' not supported".format(p))
             else:
                 handler(m['command'], m['payload'])
 
@@ -382,17 +408,21 @@ def create_websocket_application(runtime):
                 self.runtime.new_graph(payload['id'])
             # Nodes
             elif command == 'addnode':
-                self.runtime.add_node(payload['graph'], payload['id'], payload['component'])
+                self.runtime.add_node(payload['graph'], payload['id'],
+                                      payload['component'])
             elif command == 'removenode':
                 self.runtime.remove_node(payload['graph'], payload['id'])
             # Edges/connections
             elif command == 'addedge':
-                self.runtime.add_edge(payload['graph'], payload['src'], payload['tgt'])
+                self.runtime.add_edge(payload['graph'], payload['src'],
+                                      payload['tgt'])
             elif command == 'removeedge':
-                self.runtime.remove_edge(payload['graph'], payload['src'], payload['tgt'])
+                self.runtime.remove_edge(payload['graph'], payload['src'],
+                                         payload['tgt'])
             # IIP / literals
             elif command == 'addinitial':
-                self.runtime.add_iip(payload['graph'], payload['tgt'], payload['src']['data'])
+                self.runtime.add_iip(payload['graph'], payload['tgt'],
+                                     payload['src']['data'])
             elif command == 'removeinitial':
                 self.runtime.remove_iip(payload['graph'], payload['tgt'])
             # Exported ports
@@ -473,7 +503,8 @@ class RuntimeRegistry(object):
 class FlowhubRegistry(RuntimeRegistry):
     """
     FlowHub runtime registry.
-    It's necessary to use this if you want to manage your graph in either FlowHub or NoFlo-UI.
+    It's necessary to use this if you want to manage your graph in either
+    FlowHub or NoFlo-UI.
     """
     def __init__(self):
         self.log = logging.getLogger('%s.%s' % (self.__class__.__module__,
@@ -521,24 +552,32 @@ def main():
     }
 
     # Parse arguments
-    argp = argparse.ArgumentParser(description='Runtime that responds to commands sent over the network, '
-                                               'managing and executing graphs.')
-    argp.add_argument('-u', '--user-id', required=True, metavar='UUID',
-                      help='FlowHub user ID (get this from NoFlo-UI)')
-    argp.add_argument('-r', '--runtime-id', metavar='UUID',
-                      help='FlowHub unique runtime ID (generated if none specified)')
-    argp.add_argument('--label', required=True, metavar='LABEL_NAME',
-                      help="Name of this runtime (this is displayed in the UI's list of runtimes)")
+    argp = argparse.ArgumentParser(
+        description='Runtime that responds to commands sent over the network, '
+                    'managing and executing graphs.')
+    argp.add_argument(
+        '-u', '--user-id', required=True, metavar='UUID',
+        help='FlowHub user ID (get this from NoFlo-UI)')
+    argp.add_argument(
+        '-r', '--runtime-id', metavar='UUID',
+        help='FlowHub unique runtime ID (generated if none specified)')
+    argp.add_argument(
+        '--label', required=True, metavar='LABEL_NAME',
+        help="Name of this runtime (this is displayed in the UI's list of "
+             "runtimes)")
+    argp.add_argument(
+        '--host', default=defaults['host'], metavar='HOSTNAME',
+        help='Listen host for websocket (default: %(host)s)' % defaults)
+    argp.add_argument(
+        '--port', type=int, default=3569, metavar='PORT',
+        help='Listen port for websocket (default: %(port)d)' % defaults)
+    argp.add_argument(
+        '--log-file', metavar='FILE_PATH',
+        help='File to send log output to (default: none)')
+    argp.add_argument(
+        '-v', '--verbose', action='store_true',
+         help='Enable verbose logging')
 
-    argp.add_argument('--host', default=defaults['host'], metavar='HOSTNAME',
-                      help='Listen host for websocket (default: %(host)s)' % defaults)
-    argp.add_argument('--port', type=int, default=3569, metavar='PORT',
-                      help='Listen port for websocket (default: %(port)d)' % defaults)
-
-    argp.add_argument('--log-file', metavar='FILE_PATH',
-                      help='File to send log output to (default: none)')
-    argp.add_argument('-v', '--verbose', action='store_true',
-                      help='Enable verbose logging')
     # TODO: add arg for executor type (multiprocess, singleprocess, distributed)
     # TODO: add args for component search paths
     args = argp.parse_args()
@@ -558,29 +597,31 @@ def main():
 
     def runtime_task():
         """
-        This greenlet runs the websocket server that responds remote commands that
-        inspect/manipulate the Runtime.
+        This greenlet runs the websocket server that responds remote commands
+        that inspect/manipulate the Runtime.
         """
         from . import components
 
         runtime = Runtime()
         runtime.register_module(components)
 
-        r = geventwebsocket.Resource(OrderedDict([('/', create_websocket_application(runtime))]))
+        r = geventwebsocket.Resource(
+            OrderedDict([('/', create_websocket_application(runtime))]))
         s = geventwebsocket.WebSocketServer(('', args.port), r)
         s.serve_forever()
 
     def registration_task():
         """
-        This greenlet will register the runtime with FlowHub and occasionally ping the
-        endpoint to keep the runtime alive.
+        This greenlet will register the runtime with FlowHub and occasionally
+        ping the endpoint to keep the runtime alive.
         """
         flowhub = FlowhubRegistry()
 
         runtime_id = args.runtime_id
         if not runtime_id:
             runtime_id = FlowhubRegistry.create_runtime_id()
-            log.warn('No runtime ID was specified, so one was generated: %s' % runtime_id)
+            log.warn('No runtime ID was specified, so one was '
+                     'generated: {}'.format(runtime_id))
 
         # Register runtime
         flowhub.register_runtime(runtime_id, args.user_id, args.label,

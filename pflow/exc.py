@@ -13,7 +13,12 @@ class ComponentError(Exception):
     """
     Component-level error.
     """
-    pass
+    def __init__(self, component, msg):
+        self.component = component
+        self.msg = msg
+
+    def __str__(self):
+        return '"{}": {}'.format(self.component, self.msg)
 
 
 class ComponentStateError(ComponentError):
@@ -27,7 +32,12 @@ class PortError(ComponentError):
     """
     Port error.
     """
-    pass
+    def __init__(self, port, msg):
+        self.port = port
+        self.msg = msg
+
+    def __str__(self):
+        return '"{}": {}'.format(self.port, self.msg)
 
 
 class PortClosedError(PortError):

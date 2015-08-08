@@ -22,8 +22,8 @@ class Repeat(Component):
     Repeats inputs from IN to OUT
     """
     def initialize(self):
-        self.inputs.add_ports(InputPort('IN'))
-        self.outputs.add_ports(OutputPort('OUT'))
+        self.inputs.add('IN')
+        self.outputs.add('OUT')
 
     @keepalive
     def run(self):
@@ -37,12 +37,12 @@ class Repeat(Component):
 
 class Constant(Component):
     """
-    Repeats a constant VALUE (set once) to OUT, LIMIT times (or infinitely if none).
+    Repeats a constant VALUE (set once) to OUT, LIMIT times (or infinitely if
+    none).
     """
     def initialize(self):
-        self.inputs.add_ports(InputPort('VALUE'),
-                              InputPort('LIMIT',
-                                        optional=True))
+        self.inputs.add('VALUE'),
+        self.inputs.add('LIMIT', optional=True)
         self.outputs.add('OUT')
 
     def run(self):
@@ -70,7 +70,7 @@ class Drop(Component):
     This component is a sink that acts like /dev/null
     """
     def initialize(self):
-        self.inputs.add_ports(InputPort('IN'))
+        self.inputs.add('IN')
 
     @keepalive
     def run(self):
@@ -87,11 +87,11 @@ class Sleep(Component):
     repeating inputs from IN to OUT.
     """
     def initialize(self):
-        self.inputs.add_ports(InputPort('IN'),
-                              InputPort('DELAY',
-                                        allowed_types=[int],
-                                        description='Number of seconds to delay'))
-        self.outputs.add_ports(OutputPort('OUT'))
+        self.inputs.add('IN')
+        self.inputs.add('DELAY',
+                        allowed_types=[int],
+                        description='Number of seconds to delay')
+        self.outputs.add('OUT')
 
     @keepalive
     def run(self):
@@ -115,19 +115,23 @@ class Sleep(Component):
             self.outputs['OUT'].send_packet(packet)
 
 
+# NOTE: if a Component could detect whether its inputs are connected to another
+# component vs static (just IIP) a single component could be written to cope
+# with both cases.
 class DynamicSleep(Component):
     """
     Repeater that sleeps for DELAY seconds before
     repeating inputs from IN to OUT.
 
-    The difference between this and Sleep is that it constantly reads the DELAY value.
+    The difference between this and Sleep is that it constantly reads the DELAY
+    value.
     """
     def initialize(self):
-        self.inputs.add_ports(InputPort('IN'),
-                              InputPort('DELAY',
-                                        allowed_types=[int],
-                                        description='Number of seconds to delay'))
-        self.outputs.add_ports(OutputPort('OUT'))
+        self.inputs.add('IN')
+        self.inputs.add('DELAY',
+                        allowed_types=[int],
+                        description='Number of seconds to delay')
+        self.outputs.add('OUT')
 
     @keepalive
     def run(self):
@@ -150,7 +154,7 @@ class DynamicSleep(Component):
         self.outputs['OUT'].send_packet(packet)
 
 
-class Splitter(Component):
+class Split(Component):
     """
     Splits inputs from IN to OUT_A and OUT_B.
     """
@@ -208,8 +212,7 @@ class Cons(Component):
     def initialize(self):
         self.inputs.add('A')
         self.inputs.add('B')
-        self.outputs.add_ports(OutputPort('OUT',
-                                          description='Tuple stream'))
+        self.outputs.add('OUT', description='Tuple stream')
 
     @keepalive
     def run(self):
@@ -234,9 +237,9 @@ class Decons(Component):
     Breaks apart tuples from input IN and emits values to OUT_A and OUT_B.
     """
     def initialize(self):
-        self.inputs.add_ports(InputPort('IN',
-                                        allowed_types=[tuple, list],
-                                        description='Tuple stream'))
+        self.inputs.add('IN',
+                        allowed_types=[tuple, list],
+                        description='Tuple stream')
         self.outputs.add('OUT_A')
         self.outputs.add('OUT_B')
 
@@ -263,11 +266,11 @@ class DictValueExtractor(Component):
     (matching KEY) on OUT.
     """
     def initialize(self):
-        self.inputs.add_ports(InputPort('IN',
-                                        allowed_types=[collections.MutableMapping],
-                                        description='Dictionaries to filter'),
-                              InputPort('KEY',
-                                        description='Key to extract values for'))
+        self.inputs.add('IN',
+                        allowed_types=[collections.MutableMapping],
+                        description='Dictionaries to filter')
+        self.inputs.add('KEY',
+                        description='Key to extract values for')
         self.outputs.add('OUT')
 
     @keepalive
@@ -297,15 +300,15 @@ class RegexFilter(Component):
     and dropping non-matches.
     """
     def initialize(self):
-        self.inputs.add_ports(InputPort('IN',
-                                        allowed_types=[str],
-                                        description='String to filter'),
-                              InputPort('REGEX',
-                                        allowed_types=[str],
-                                        description='Regex to use for filtering'))
-        self.outputs.add_ports(OutputPort('OUT',
-                                          allowed_types=[str],
-                                          description='String that matched filter'))
+        self.inputs.add('IN',
+                        allowed_types=[str],
+                        description='String to filter')
+        self.inputs.add('REGEX',
+                        allowed_types=[str],
+                        description='Regex to use for filtering')
+        self.outputs.add('OUT',
+                         allowed_types=[str],
+                         description='String that matched filter')
 
     @keepalive
     def run(self):
@@ -398,17 +401,19 @@ class Modulo(Component):
 
 class Binner(Component):
     def initialize(self):
-        self.inputs.add_ports(InputPort('IN',
-                                        description='Tuples of (value, size) or simply size'),
-                              InputPort('MAX_SIZE',
-                                        allowed_types=[int, float],
-                                        description='Max size threshold before bin bracket gets sent downstream'),
-                              InputPort('TIMEOUT',
-                                        allowed_types=[int],
-                                        optional=True,
-                                        description='Number of seconds to wait for receive before ending current bin'))
-        self.outputs.add_ports(OutputPort('OUT',
-                                          description='Stream of values, bracketed by size'))
+        self.inputs.add('IN',
+                        description='Tuples of (value, size) or simply size')
+        self.inputs.add('MAX_SIZE',
+                        allowed_types=[int, float],
+                        description='Max size threshold before bin bracket '
+                                    'gets sent downstream')
+        self.inputs.add('TIMEOUT',
+                        allowed_types=[int],
+                        optional=True,
+                        description='Number of seconds to wait for receive '
+                                    'before ending current bin')
+        self.outputs.add('OUT',
+                         description='Stream of values, bracketed by size')
 
     @keepalive
     def run(self):
@@ -482,11 +487,11 @@ class FileTailReader(Component):
     emitting new lines that are added to output port OUT.
     """
     def initialize(self):
-        self.inputs.add_ports(InputPort('PATH',
-                                        description='File to tail',
-                                        allowed_types=[str]))
-        self.outputs.add_ports(OutputPort('OUT',
-                                          description='Lines that are added to file'))
+        self.inputs.add('PATH',
+                        description='File to tail',
+                        allowed_types=[str])
+        self.outputs.add('OUT',
+                         description='Lines that are added to file')
 
     @keepalive
     def run(self):
@@ -516,13 +521,14 @@ class ConsoleLineWriter(Component):
     This component is a sink.
     """
     def initialize(self):
-        self.inputs.add_ports(InputPort('IN'),
-                              InputPort('SILENCE',
-                                        allowed_types=[bool],
-                                        optional=True,
-                                        description='Silence the console output? (useful for debugging)'))
-        self.outputs.add_ports(OutputPort('OUT',
-                                          optional=True))
+        self.inputs.add('IN')
+        self.inputs.add('SILENCE',
+                        allowed_types=[bool],
+                        optional=True,
+                        description='Silence the console output? (useful for '
+                                    'debugging)')
+        self.outputs.add('OUT',
+                         optional=True)
 
     @keepalive
     def run(self):
@@ -569,20 +575,21 @@ class MongoCollectionWriter(Component):
     Writes every record from IN to a MongoDB collection.
     """
     def initialize(self):
-        self.inputs.add_ports(InputPort('IN'),
-                              InputPort('MONGO_URI',
-                                        allowed_types=[str],
-                                        description='URI of the MongoDB server to connect to'),
-                              InputPort('MONGO_DATABASE',
-                                        allowed_types=[str],
-                                        description='Name of the database to write to'),
-                              InputPort('MONGO_COLLECTION',
-                                        allowed_types=[str],
-                                        description='Name of the collection to write to'),
-                              InputPort('DELETE_COLLECTION',
-                                        allowed_types=[bool],
-                                        optional=True,
-                                        description='If True, delete all documents in collection before writing to it'))
+        self.inputs.add('IN'),
+        self.inputs.add('MONGO_URI',
+                        allowed_types=[str],
+                        description='URI of the MongoDB server to connect to')
+        self.inputs.add('MONGO_DATABASE',
+                        allowed_types=[str],
+                        description='Name of the database to write to')
+        self.inputs.add('MONGO_COLLECTION',
+                        allowed_types=[str],
+                        description='Name of the collection to write to')
+        self.inputs.add('DELETE_COLLECTION',
+                        allowed_types=[bool],
+                        optional=True,
+                        description='If True, delete all documents in '
+                                    'collection before writing to it')
 
     @keepalive
     def run(self):
@@ -677,14 +684,15 @@ class RandomNumberGenerator(Component):
     This component is a generator.
     """
     def initialize(self):
-        self.inputs.add_ports(InputPort('SEED',
-                                        allowed_types=[int],
-                                        optional=True,
-                                        description='Seed value for PRNG'),
-                              InputPort('LIMIT',
-                                        allowed_types=[int],
-                                        optional=True,
-                                        description='Number of times to iterate (default: infinite)'))
+        self.inputs.add('SEED',
+                        allowed_types=[int],
+                        optional=True,
+                        description='Seed value for PRNG')
+        self.inputs.add('LIMIT',
+                        allowed_types=[int],
+                        optional=True,
+                        description='Number of times to iterate (default: '
+                                    'infinite)')
         self.outputs.add_ports(OutputPort('OUT'))
 
     def run(self):
@@ -704,7 +712,8 @@ class RandomNumberGenerator(Component):
             i = 1
             while not self.is_terminated:
                 random_value = prng.randint(1, 100)
-                self.log.debug('Generated: %d (%d/%s)' % (random_value, i, limit_value))
+                self.log.debug('Generated: %d (%d/%s)' % (random_value, i,
+                                                          limit_value))
 
                 packet = self.create_packet(random_value)
                 self.outputs['OUT'].send_packet(packet)
