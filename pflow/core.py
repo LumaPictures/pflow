@@ -175,7 +175,12 @@ class Component(object):
                                 ComponentState.ERROR)
     def create_packet(self, value=None):
         """
-        Create a new packet and set self as owner.
+        Create a new packet.
+
+        This creates a `Packet` instance and sets this component as the owner.
+        Once created, a packet which is no longer needed must be explicitly
+        destroyed using `drop_packet`, otherwise it is considered a leak and
+        will result in warnings when the graph terminates.
 
         Parameters
         ----------
