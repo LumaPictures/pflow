@@ -9,78 +9,22 @@ try:
 except ImportError:
     import Queue as queue  # 2.x
 
-from enum import Enum
-
-from . import utils, exc
+from . import utils
+from . import exc
 from . import parsefbp
-from .port import Packet, PortRegistry, InputPort, OutputPort, ArrayInputPort, ArrayOutputPort
+from .port import (Packet, PortRegistry, InputPort, OutputPort, ArrayInputPort,
+                   ArrayOutputPort)
+from .states import (ComponentState, assert_component_state,
+                     assert_not_component_state)
 
 log = logging.getLogger(__name__)
-
-
-class ComponentState(Enum):
-
-    # Comonent hasn't been initialized yet (initial state).
-    NOT_INITIALIZED = 'NOT_INITIALIZED'
-
-    # Component is initialized, but hasn't been run yet.
-    INITIALIZED = 'INITIALIZED'
-
-    # Component has received data and is actively running.
-    ACTIVE = 'ACTIVE'
-
-    # Component is waiting for data to send on its output port.
-    SUSP_SEND = 'SUSP_SEND'
-
-    # Component is waiting to receive data on its input port.
-    SUSP_RECV = 'SUSP_RECV'
-
-    # Component has successfully terminated execution (final state).
-    TERMINATED = 'TERMINATED'
-
-    # Component has terminated execution because of an error (final state).
-    ERROR = 'ERROR'
-
-
-def assert_component_state(*allowed_states):
-    """
-    Decorator that asserts the Component is in one of the given allowed_states
-    before the method it wraps can be called.
-
-    :param allowed_states: allowed ComponentStates
-    """
-    def inner_fn(fn):
-        @functools.wraps(fn)
-        def wrapper(self, *args, **kwargs):
-            if self.state not in allowed_states:
-                raise exc.ComponentStateError(
-                    '{}.{}() called on component {} in unexpected state {} '
-                    '(expecting one of: {})'.format(
-                        self.__class__.__name__, fn.__name__, self.name,
-                        self.state, ', '.join(str(x) for x in allowed_states)))
-            return fn(self, *args, **kwargs)
-
-        return wrapper
-
-    return inner_fn
-
-
-def assert_not_component_state(*disallowed_states):
-    """
-    Decorator that asserts the Component is not in one of the given
-    `disallowed_states` before the method it wraps can be called.
-
-    :param disallowed_states: disallowed ComponentStates
-    """
-    allowed_states = set(ComponentState).difference(disallowed_states)
-    return assert_component_state(allowed_states)
-
 
 
 def keepalive(fn):
     """
     Decorator that tells the runtime to invoke the component's run()
-    for each incoming packet.
+    for each incoming packet until the graph is exhausted or the component
+    is explicitly terminated.
     """
     if fn.func_name != 'run':
         raise ValueError('The keepalive decorator was only intended for the '
