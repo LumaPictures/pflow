@@ -193,6 +193,8 @@ class Component(object):
         self.owned_packet_count += 1
         return packet
 
+    # FIXME: shouldn't this be:
+    # @assert_component_state(ComponentState.ACTIVE)
     @assert_not_component_state(ComponentState.TERMINATED,
                                 ComponentState.ERROR)
     def drop_packet(self, packet):
@@ -217,7 +219,7 @@ class Component(object):
     @property
     def is_terminated(self):
         """
-        Has this component been terminated?
+        Returns whether the component has been terminated.
 
         Returns
         -------
@@ -228,14 +230,34 @@ class Component(object):
                               ComponentState.ERROR)
 
     def is_alive(self):
+        """
+        Returns whether the component is still alive (e.g. has not yet been
+        terminated).
+
+        Returns
+        -------
+        is_alive : bool
+            whether the component is still alive.
+        """
         return not self.is_terminated
 
     # FIXME: This would be clearer as a method (properties should be reserved for attribute-like values)
     @property
     def is_suspended(self):
+        """
+        Returns whether the component is in a suspended state.
+
+        Returns
+        -------
+        is_suspended : bool
+            whether the component is suspended.
+        """
         return self.state in (ComponentState.SUSP_RECV,
                               ComponentState.SUSP_SEND)
 
+    # FIXME: shouldn't this be:
+    # @assert_component_state(ComponentState.ACTIVE, ComponentState.SUSP_RECV,
+    #                         ComponentState.SUSP_SEND)
     @assert_not_component_state(ComponentState.TERMINATED,
                                 ComponentState.ERROR)
     def terminate(self, ex=None):
@@ -259,6 +281,8 @@ class Component(object):
 
         self.executor.terminate_thread(self)
 
+    # FIXME: shouldn't this be:
+    # @assert_component_state(ComponentState.ACTIVE)
     def suspend(self, seconds=None):
         """
         Yield execution to scheduler.

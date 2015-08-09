@@ -18,7 +18,7 @@ class ComponentError(Exception):
         self.msg = msg
 
     def __str__(self):
-        return '"{}": {}'.format(self.component, self.msg)
+        return '{}: {}'.format(self.component, self.msg)
 
 
 class ComponentStateError(ComponentError):
@@ -37,7 +37,7 @@ class PortError(ComponentError):
         self.msg = msg
 
     def __str__(self):
-        return '"{}": {}'.format(self.port, self.msg)
+        return '{}: {}'.format(self.port, self.msg)
 
 
 class PortClosedError(PortError):

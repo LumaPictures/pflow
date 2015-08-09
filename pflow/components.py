@@ -273,6 +273,7 @@ class DictValueExtractor(Component):
                         description='Key to extract values for')
         self.outputs.add('OUT')
 
+    # FIXME: does this need a keepalive?
     @keepalive
     def run(self):
         key = self.inputs['KEY'].receive()
@@ -310,6 +311,7 @@ class RegexFilter(Component):
                          allowed_types=[str],
                          description='String that matched filter')
 
+    # FIXME: does this need a keepalive?
     @keepalive
     def run(self):
         import re
@@ -415,6 +417,7 @@ class Binner(Component):
         self.outputs.add('OUT',
                          description='Stream of values, bracketed by size')
 
+    # FIXME: does this need a keepalive?
     @keepalive
     def run(self):
         max_size = self.inputs['MAX_SIZE'].receive()
@@ -530,6 +533,7 @@ class ConsoleLineWriter(Component):
         self.outputs.add('OUT',
                          optional=True)
 
+    # FIXME: does this need a keepalive?
     @keepalive
     def run(self):
         silence = self.inputs['SILENCE'].receive()
@@ -591,6 +595,7 @@ class MongoCollectionWriter(Component):
                         description='If True, delete all documents in '
                                     'collection before writing to it')
 
+    # FIXME: does this need a keepalive?
     @keepalive
     def run(self):
         import pymongo
