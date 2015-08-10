@@ -9,11 +9,9 @@ try:
 except ImportError:
     import Queue as queue  # 2.x
 
-from .core import Graph, Component, ComponentState, \
-    InputPort, OutputPort, \
-    ArrayInputPort, ArrayOutputPort, keepalive
-
-from .port import EndOfStream, StartBracket, EndBracket, BracketPacket
+from .core import (Graph, Component, ComponentState, InputPort, OutputPort,
+                   ArrayInputPort, ArrayOutputPort, keepalive, EndOfStream,
+                   StartBracket, EndBracket, BracketPacket)
 from . import exc
 
 

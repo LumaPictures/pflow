@@ -7,77 +7,10 @@ try:
 except ImportError:
     from Queue import Queue  # 2.x
 
+from .packet import EndOfStream, StartBracket, EndBracket
 from . import exc
 
 log = logging.getLogger(__name__)
-
-
-class Packet(object):
-    """
-    Information packet (IP)
-    """
-    def __init__(self, value):
-        """
-        value:
-        """
-        self.value = value
-        self._owner = None  # Component that owns this
-        self.attrs = {}  # Named attributes
-
-    @property
-    def owner(self):
-        return self._owner
-
-    @owner.setter
-    def owner(self, value):
-        if self._owner is not None:
-            raise ValueError("You can not change a packet's owner. "
-                             "Create a copy and drop this packet instead.")
-
-        self._owner = value
-
-    def __str__(self):
-        return 'Packet(%s)' % self.value
-
-
-class EndOfStreamType(object):
-    def __repr__(self):
-        return 'END OF STREAM'
-
-EndOfStream = EndOfStreamType()
-
-
-# FIXME: should we enforce that BracketPackets have no value attribute?  Create a BasePacket with no .value?
-# FIXME: create KeyedStartBracket and KeyedEndBracket for explicitness and easy type checking?
-class BracketPacket(Packet):
-    """
-    Special packet used for bracketing.
-    """
-    __metaclass__ = ABCMeta
-
-    def __init__(self, key=None):
-        """
-        key: an optional key used for random access bracketing (e.g. building dicts or arrays
-                    without the need for strict stack behavior). Represents the begin/end of data
-                    for a given key. Keyed and unkeyed brackets can be mixed,
-                    but every keyed StartBracket must have a keyed EndBracket.
-        """
-        super(BracketPacket, self).__init__(self.__class__.__name__)
-        self.key = key
-
-
-class StartBracket(BracketPacket):
-    """
-    Start of bracketed data.
-    """
-    pass
-
-
-class EndBracket(BracketPacket):
-    """
-    End of bracketed data.
-    """
-    pass
 
 
 class BasePort(object):

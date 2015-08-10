@@ -12,8 +12,9 @@ except ImportError:
 from . import utils
 from . import exc
 from . import parsefbp
-from .port import (Packet, PortRegistry, InputPort, OutputPort, ArrayInputPort,
+from .port import (PortRegistry, InputPort, OutputPort, ArrayInputPort,
                    ArrayOutputPort)
+from .packet import (Packet, EndOfStream, StartBracket, EndBracket)
 from .states import (ComponentState, assert_component_state,
                      assert_not_component_state)
 
