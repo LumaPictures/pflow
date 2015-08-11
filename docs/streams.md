@@ -1,15 +1,4 @@
 
-Streams
-=======
-
-Consider the following stream of data:
-
-```
-1 2 a 3 b c 4 5 d
-```
-
-There are a handful of ways that we might want to structure this data.  
-
 Subtreams
 ---------
 
@@ -24,12 +13,14 @@ symbol | meaning
   `*`  | switch namespace (destination name implied, but not shown)
   `.`  | data acquired by row
 
-We can add hierarchical structure to a stream of data by injecting
-start `(` and end `)` control brackets into the stream. From J Paul Morrison:
+Consider the following stream of data:
 
-> Bracket IPs have a recognizable type which follows a special convention, so
-> that they can never conflict with user-defined types. Brackets come in two 
-> flavours: open and close brackets.
+```
+1 2 a 3 b c 4 5 d
+```
+
+We can add hierarchical structure to a stream of data by injecting
+start `(` and end `)` control brackets into the stream.
 
 For example:
 
@@ -43,8 +34,9 @@ The resulting structure is equivalent to this python list:
 ['1', '2', ['a'], '3', ['b', 'c'], '4', '5', ['d']]
 ```
 
-To better understand this, can separate data packets and bracketing packets into
-separate rows:
+The chart below separates data packets and bracketing packets into
+separate rows to reinforce a key concept of bracketing packets: they do not in any
+way alter the data packets themselves, they surround and lend stucture to them.
 
 ```
 --------------------------------------------------
@@ -54,8 +46,6 @@ separate rows:
 --------------------------------------------------
 ```
 
-This demonstrates a key concept of bracketing packets: they do not in any
-way alter the data packets themselves, they surround and lend stucture to them.
 
 Stream Map
 ----------
@@ -67,7 +57,9 @@ structured data out of order, such as data acquired from an asynchronous process
 A map has one active namespace at a time (akin to a key in a `dict`, or more
 accuractely a `defaultdict(list)`), into which all incoming packets
 are placed.  The active namespace is set via a special "switch" control packet
-(marked by `*` in the charts below).  The power of a map is that it allows a
+(marked by `*` in the charts below).  
+
+The power of a map is that it allows a
 component to add items to a substream, switch to a different substream at the same
 level, add more items there, then return to the orignal and continue building
 where it left off. In effect, it managers a cursor that can be moved between
@@ -78,13 +70,13 @@ many component operations.
 
 A map has its
 own bracketing packets (denoted by `{` and `}`) and must be explictily started
-and ended. Using a switch packet to change namespaces when no open map
-exists is an error. Once a map has been started, normal substreams
-(`(` and `)`) are created within it, and can be nested.
+and ended. If a "switch namespace" packet arrives when no open map
+exists it is an error. Once a map has been started and a namespace set, normal
+substreams (`(` and `)`) are created within it, and can be nested.
 
 Because maps have a definitive beginning and end, they can be nested within
 substreams.  Namespaces are strictly local to the currently open map, and cannot
-refer to higher level maps (just as the keys within a dictionary cannot point
+refer to higher-level maps (just as the keys within a dictionary cannot point
 into a different dictionary)
 
 Here is an example which separates the stream of input characters into alpha and
