@@ -47,8 +47,8 @@ way alter the data packets themselves, they surround and lend stucture to them.
 ```
 
 
-Stream Map
-----------
+Stream Maps
+-----------
 
 A map is a container for substreams that allows the generation of multiple
 sibling substreams simultaneously.  It is particularly useful for streaming
@@ -62,8 +62,8 @@ are placed.  The active namespace is set via a special "switch" control packet
 The power of a map is that it allows a
 component to add items to a substream, switch to a different substream at the same
 level, add more items there, then return to the orignal and continue building
-where it left off. In effect, it managers a cursor that can be moved between
-mutliple substreams at the same level. Something akin to a map could be achieved
+where it left off.  In effect, it manages a cursor that can be moved between
+mutliple substreams at the same level.  Something akin to a map could be achieved
 using substreams by repeatedly opening and closing brackets, but a map ensures
 that each substream has a single start and end bracket, which is essential for
 many component operations.
@@ -74,7 +74,7 @@ and ended. If a "switch namespace" packet arrives when no open map
 exists it is an error. Once a map has been started and a namespace set, normal
 substreams (`(` and `)`) are created within it, and can be nested.
 
-Because maps have a definitive beginning and end, they can be nested within
+Because maps have a definitive beginning and end, they can themselves be nested within
 substreams.  Namespaces are strictly local to the currently open map, and cannot
 refer to higher-level maps (just as the keys within a dictionary cannot point
 into a different dictionary)
@@ -105,11 +105,11 @@ Channels
 ========
 
 Simply put, a channel is the sequence of control packets within a stream.
-As we know, control packets can be intermixed with data packets within the packet stream.
-They add structure to the stream without the alteration or cooperation of the data
+As we know, control packets can be intermixed with data packets to add structure
+to the stream without the alteration or cooperation of data
 packets, which are immutable.  Because of their separate, descriptive nature, it 
-is possible to strip out a "channel" of control packets and completely replace
-them, thereby to provide a completely different structure to the surrounding data.  
+is possible to strip out a "channel" of control packets from the stream and completely replace
+it, thereby providing a completely different structure to the surrounding data.  
 
 The power of channels in pflow is that multiple mutually exclusive channels can
 exist within the same stream of packets, allowing components to choose which representation
@@ -122,7 +122,10 @@ A component subscribes to a particular representation of the data via a named
 "channel".  Control packets are assigned a channel when they are created (by 
 default, this is the "default" channel).  When a component receives
 control packets which do not belong to the component's subscribed input channel
-they are automatically skipped and passed downtream untouched.
+they are automatically skipped and passed downtream untouched.  While it can
+be useful to think of a channel as a composite of data packets and bracket packets
+it is more accurate to say that a channel is a filtering out of control packets in
+foreign channels.
 
 The chart below merges the examples from above into a stream of packets that
 combine hierarchical and mapped stuctures, placing each into their own channel.
