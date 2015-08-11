@@ -2,7 +2,6 @@ from abc import ABCMeta, abstractmethod
 import logging
 import json
 import inspect
-import functools
 
 try:
     import queue  # 3.x
@@ -14,7 +13,8 @@ from . import exc
 from . import parsefbp
 from .port import (PortRegistry, InputPort, OutputPort, ArrayInputPort,
                    ArrayOutputPort)
-from .packet import (Packet, EndOfStream, StartBracket, EndBracket)
+from .packet import (Packet, EndOfStream, BracketPacket, StartBracket,
+                     EndBracket)
 from .states import (ComponentState, assert_component_state,
                      assert_not_component_state)
 
@@ -174,7 +174,7 @@ class Component(object):
 
     @assert_not_component_state(ComponentState.TERMINATED,
                                 ComponentState.ERROR)
-    def create_packet(self, value=None):
+    def create_packet(self, value):
         """
         Create a new packet.
 
@@ -193,6 +193,10 @@ class Component(object):
         packet : ``Packet``
             newly created packet
         """
+        if isinstance(value, (Packet, Component)):
+            raise ValueError("Attempting to create a packet out of a {}: "
+                             "{!r}".format(value.__class__.__name__, value))
+
         packet = Packet(value)
         packet.owner = self
 
@@ -314,9 +318,9 @@ class InitialPacketGenerator(Component):
     single packet before terminating.
     """
     def __init__(self, value):
-        self.value = value
         super(InitialPacketGenerator, self).__init__(
             'IIP_GEN_{}'.format(utils.random_id()))
+        self.value = value
 
     def initialize(self):
         self.outputs.add('OUT')
@@ -481,9 +485,6 @@ class Graph(Component):
         """
         if not isinstance(port, InputPort):
             raise ValueError('port must be an InputPort')
-
-        if isinstance(value, Packet):
-            raise ValueError('value can not be a Packet')
 
         iip = InitialPacketGenerator(value)
         self.connect(iip.outputs['OUT'], port)

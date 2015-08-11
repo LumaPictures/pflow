@@ -8,7 +8,7 @@ class Packet(object):
         """
         value:
         """
-        self.value = value
+        self._value = value
         self._owner = None  # Component that owns this
         self.attrs = {}  # Named attributes
 
@@ -17,14 +17,23 @@ class Packet(object):
         return self._owner
 
     @owner.setter
-    def owner(self, value):
+    def owner(self, owner):
         if self._owner is not None:
             raise ValueError("You can not change a packet's owner. "
                              "Create a copy and drop this packet instead.")
 
-        self._owner = value
+        self._owner = owner
 
-    def __str__(self):
+    @property
+    def value(self):
+        return self._value
+
+    @value.setter
+    def value(self, value):
+        raise ValueError("You can not change a packet's value. "
+                         "Create a copy and drop this packet instead.")
+
+    def __repr__(self):
         return 'Packet({!r})'.format(self.value)
 
 

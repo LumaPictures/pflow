@@ -7,7 +7,7 @@ try:
 except ImportError:
     from Queue import Queue  # 2.x
 
-from .packet import EndOfStream, StartBracket, EndBracket
+from .packet import EndOfStream, Packet, StartBracket, EndBracket
 from . import exc
 
 log = logging.getLogger(__name__)

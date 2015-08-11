@@ -1,3 +1,4 @@
+import functools
 from enum import Enum
 
 from . import exc
