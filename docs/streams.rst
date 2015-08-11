@@ -21,7 +21,7 @@ Consider the following stream of data::
     1 2 a 3 b c 4 5 d
 
 We can add hierarchical structure to this stream of data by injecting
-start `(` and end `)` control brackets into the stream. For example::
+start ``(`` and end ``)`` control brackets into the stream. For example::
 
     1 2 ( a ) 3 ( b c ) 4 5 ( d )
 
@@ -37,27 +37,26 @@ separate rows to reinforce a key concept of bracketing packets: they do not in a
 way alter the data packets themselves, which are immutable, they surround and
 lend stucture to them.
 
-+-------------+--------------------------------------+
-| Packet Type | Stream                               |
-+=============+======================================+
-| data        | ``| 1 2   a   3   b c   4 5   d``    |
-+-------------+--------------------------------------+
-| brackets    | ``|     (   )   (     )     (   )``  |
-+-------------+--------------------------------------+
-
++-------------+-----------------------------------------------------------------------------------------+
+| Packet Type | Stream                                                                                  |
++=============+=====+=====+=====+=====+=====+=====+=====+=====+=====+=====+=====+=====+=====+=====+=====+
+| data        |``1``|``2``|     |``a``|     |``3``|     |``b``|``c``|     |``4``|``5``|     |``d``|     |
++-------------+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+
+| brackets    |     |     |``(``|     |``)``|     |``(``|     |     |``)``|     |     |``(``|     |``)``|
++-------------+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+
 
 
 Stream Maps
 -----------
 
-A map is a container for substreams that allows the generation of multiple
+A map is a container for substreams that enables the generation of multiple
 sibling substreams simultaneously.  It is particularly useful for streaming
 structured data out of order, such as data acquired from an asynchronous process.
 
-A map has one active namespace at a time (akin to a key in a `dict`, or more
-accuractely a `defaultdict(list)`), into which all incoming packets
+A map has one active namespace at a time (akin to a key in a ``dict``, or more
+accuractely a ``defaultdict(list)``), into which all incoming packets
 are placed.  The active namespace is set via a special "switch" control packet
-(marked by `*` in the charts below).  
+(marked by ``*`` in the charts below).  
 
 The power of a map is that it allows a component to add items to a substream,
 switch to a different substream, add more items there, then return to the orignal and continue building
@@ -67,11 +66,11 @@ using only substreams by repeatedly opening and closing brackets, but a map ensu
 that each substream has a single start and end bracket, which is essential for
 many component operations.
 
-A map has its own bracketing packets distinct from substreams (denoted by `{`
-and `}`) and must be explictily started
+A map has its own bracketing packets distinct from substreams (denoted by ``{``
+and ``}``) and must be explictily started
 and ended. If a "switch namespace" packet arrives when no open map
 exists it is an error. Once a map has been started and a namespace set, normal
-substreams (`(` and `)`) are created within it, and can be nested.
+substreams (``(`` and ``)``) are created within it, and can be nested.
 
 Because maps have a definitive beginning and end, they can themselves be nested within
 substreams.  Namespaces are strictly local to the currently open map, and cannot
@@ -81,18 +80,18 @@ into a different dictionary)
 Here is an example which separates the stream of input characters into alpha and
 numeric substreams. 
 
++-------------+-----------+-----------------------------------------------------------------------------------------------------------------------------+
+| Packet Type | Namespace | Stream                                                                                                                      |
++=============+===========+=====+=====+=====+=====+=====+=====+=====+=====+=====+=====+=====+=====+=====+=====+=====+=====+=====+=====+=====+=====+=====+
+| data        |           |     |     |     |``1``|``2``|     |     |``a``|     |``3``|     |``b``|``c``|     |``4``|``5``|     |     |``d``|     |     |
++-------------+-----------+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+
+| brackets    | num       |     |     |``(``|``"``|``"``|     |     |     |     |``"``|     |     |     |     |``"``|``"``|``)``|     |     |     |     |
++             +-----------+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+
+|             | _control_ |``{``|``*``|     |     |     |``*``|     |     |``*``|     |``*``|     |     |``*``|     |     |     |``*``|     |     |``}``|
++             +-----------+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+
+|             | alpha     |     |     |     |     |     |     |``(``|``"``|     |     |     |``"``|``"``|     |     |     |     |     |``"``|``)``|     |
++-------------+-----------+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+
 
-+-------------+-----------+--------------------------------------------------+
-| Packet Type | Namespace | Stream                                           |
-+=============+===========+==================================================+
-| data        |           | ``|      1 2     a   3   b c   4 5     d      |``|
-+-------------+-----------+--------------------------------------------------+
-|             | num       | ``|    ( . .         .         . . )          |``|
-+             +-----------+--------------------------------------------------+
-| brackets    | _control_ | ``| { *       *     *   *     *       *     } |``|
-+             +-----------+--------------------------------------------------+
-|             | alpha     | ``|            ( .       . .           . )    |``|
-+-------------+-----------+--------------------------------------------------+
 
 
 The resulting structure resembles this python dictionary:
@@ -108,7 +107,7 @@ The resulting structure resembles this python dictionary:
 Channels
 ========
 
-As we know, control packets can be inserted between data packets to add structure
+As discussed earlier, control packets can be inserted between data packets to add structure
 to a stream. Because they are a secondary superimposition of structure onto a
 constant data stream, these streams of control packets are, when taken as a whole,
 interchangeable.  In other words, it is possible to strip out all of the control packets
@@ -120,7 +119,7 @@ For example, we could remove the following substreams which separate letters fro
     1 2 ( a ) 3 ( b c ) 4 5 ( d )
 
 
-And instead replace them with substreams that group adjacent letter-number pairs.::
+And instead replace them with substreams that group adjacent letter-number pairs::
 
 
     1 ( 2 a ) ( 3 b ) ( c 4 ) ( 5 d )
@@ -158,19 +157,21 @@ component that requires them.
     they are skipped and passed downtream untouched.  
 
 The chart below merges the substream and map examples from above into a single
-stream of packets that combines, placing each representation into its own channel.
+stream of packets, placing each representation into its own channel.
 
-+-------------+-----------+-----------+-----------------------------------------------------------------------------------------------------------------------------------------------------------+
-| Packet Type | Channel   | Namespace | Stream                                                                                                                                                    |
-+=============+===========+===========+=====+=====+=====+=====+=====+=====+=====+=====+=====+=====+=====+=====+=====+=====+=====+=====+=====+=====+=====+=====+=====+=====+=====+=====+=====+=====+
-| data        |           |           |     |     |``1``|``2``|     |     |     |``a``|     |     |``3``|     |     |``b``|``c``|     |     |``4``|``5``|     |     |     |``d``|     |     |     |
-+-------------+-----------+-----------+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+
-|             | default   |           |     |     |``"``|``"``|``(``|     |     |``"``|``)``|     |``"``|``(``|     |``"``|``"``|``)``|     |``"``|``"``|``(``|     |     |``"``|``)``|     |     |
-+             +-----------+-----------+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+
-| brackets    |           | num       |     |``(``|``"``|``"``|     |     |     |     |     |     |``"``|     |     |     |     |     |     |``"``|``"``|     |``)``|     |     |     |     |     |
-+             +           +-----------+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+
-|             | alphanum  | _control_ |``*``|     |     |     |     |``*``|     |     |     |``*``|     |     |``*``|     |     |     |``*``|     |     |     |     |``*``|     |     |     |``}``|
-+             +           +-----------+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+
-|             |           | alpha     |     |     |     |     |     |     |``(``|``"``|     |     |     |     |     |``"``|``"``|     |     |     |     |     |     |     |``"``|     |``)``|     |
-+-------------+-----------+-----------+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+
+**Be sure to scroll to the right to see the whole chart**
+
++-------------+-----------+-----------+-----------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| Packet Type | Channel   | Namespace | Stream                                                                                                                                                          |
++=============+===========+===========+=====+=====+=====+=====+=====+=====+=====+=====+=====+=====+=====+=====+=====+=====+=====+=====+=====+=====+=====+=====+=====+=====+=====+=====+=====+=====+=====+
+| data        |           |           |     |     |     |``1``|``2``|     |     |     |``a``|     |     |``3``|     |     |``b``|``c``|     |     |``4``|``5``|     |     |     |``d``|     |     |     |
++-------------+-----------+-----------+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+
+|             | default   |           |     |     |     |``"``|``"``|``(``|     |     |``"``|``)``|     |``"``|``(``|     |``"``|``"``|``)``|     |``"``|``"``|``(``|     |     |``"``|``)``|     |     |
++             +-----------+-----------+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+
+| brackets    |           | num       |     |     |``(``|``"``|``"``|     |     |     |     |     |     |``"``|     |     |     |     |     |     |``"``|``"``|     |``)``|     |     |     |     |     |
++             +           +-----------+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+
+|             | alphanum  | _control_ |``{``|``*``|     |     |     |     |``*``|     |     |     |``*``|     |     |``*``|     |     |     |``*``|     |     |     |     |``*``|     |     |     |``}``|
++             +           +-----------+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+
+|             |           | alpha     |     |     |     |     |     |     |     |``(``|``"``|     |     |     |     |     |``"``|``"``|     |     |     |     |     |     |     |``"``|     |``)``|     |
++-------------+-----------+-----------+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+
 
