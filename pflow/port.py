@@ -7,7 +7,7 @@ try:
 except ImportError:
     from Queue import Queue  # 2.x
 
-from .packet import EndOfStream, Packet, StartBracket, EndBracket
+from .packet import EndOfStream, Packet, StartSubStream, EndSubStream
 from . import exc
 
 log = logging.getLogger(__name__)
@@ -274,6 +274,7 @@ class OutputPort(Port):
         if not isinstance(packet, Packet):
             raise ValueError('packet must be a Packet instance')
 
+        # FIXME: assert owner / set it if it's None
         executor = self.component.executor
         executor.send_port(self.component, self.name, packet)
 
@@ -284,7 +285,7 @@ class OutputPort(Port):
     def start_bracket(self):
         self._bracket_depth += 1
 
-        packet = StartBracket()
+        packet = StartSubStream()
         packet.owner = self.component
         self.send_packet(packet)
 
@@ -294,7 +295,7 @@ class OutputPort(Port):
             raise ValueError('end_bracket() called too many times '
                              'on {}'.format(self))
 
-        packet = EndBracket()
+        packet = EndSubStream()
         packet.owner = self.component
         self.send_packet(packet)
 

@@ -13,8 +13,8 @@ from . import exc
 from . import parsefbp
 from .port import (PortRegistry, InputPort, OutputPort, ArrayInputPort,
                    ArrayOutputPort)
-from .packet import (Packet, EndOfStream, BracketPacket, StartBracket,
-                     EndBracket)
+from .packet import (Packet, EndOfStream, ControlPacket, StartSubStream,
+                     EndSubStream, StartMap, EndMap, SwitchMapNamespace)
 from .states import (ComponentState, assert_component_state,
                      assert_not_component_state)
 

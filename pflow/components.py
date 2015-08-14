@@ -11,7 +11,7 @@ except ImportError:
 
 from .core import (Graph, Component, ComponentState, InputPort, OutputPort,
                    ArrayInputPort, ArrayOutputPort, keepalive, EndOfStream,
-                   StartBracket, EndBracket, BracketPacket)
+                   StartSubStream, EndSubStream, StartMap, EndMap, ControlPacket, SwitchMapNamespace)
 from . import exc
 
 
@@ -171,11 +171,11 @@ class Split(Component):
         out_a = self.outputs['OUT_A']
         out_b = self.outputs['OUT_B']
 
-        if isinstance(packet, StartBracket):
+        if isinstance(packet, StartSubStream):
             self.log.debug("Bracket open")
             out_a.start_bracket()
             out_b.start_bracket()
-        elif isinstance(packet, EndBracket):
+        elif isinstance(packet, EndSubStream):
             self.log.debug("Bracket close")
             out_a.end_bracket()
             out_b.end_bracket()
@@ -452,7 +452,7 @@ class Binner(Component):
 
                 self.terminate()
                 break
-            elif isinstance(value_tuple, BracketPacket):
+            elif isinstance(value_tuple, ControlPacket):
                 # Ignore incoming brackets
                 continue
 
@@ -545,11 +545,11 @@ class ConsoleLineWriter(Component):
                 self.terminate()
                 break
             else:
-                if isinstance(packet, StartBracket):
+                if isinstance(packet, StartSubStream):
                     if not silence:
                         self._write_line("[start group]")
                     depth += 1
-                elif isinstance(packet, EndBracket):
+                elif isinstance(packet, EndSubStream):
                     if not silence:
                         self._write_line("[end group]")
                     depth -= 1
@@ -570,6 +570,126 @@ class ConsoleLineWriter(Component):
         self._write('%s%s' % (line, os.linesep))
         sys.stdout.flush()
 
+
+class ListMap(dict):
+    def set_active_key(self, key):
+        self._key = key
+
+    def get_active_key(self):
+        assert hasattr(self, '_key')
+        return self._key
+
+    def active_list(self):
+        return self[self.get_active_key()]
+
+    def active_list_started(self):
+        return self.get_active_key() in self
+
+    def append(self, value):
+        self.setdefault(self.get_active_key(), []).append(value)
+
+
+class ToJSON(Component):
+    """
+
+    """
+    def initialize(self):
+        self.inputs.add('IN')
+        self.outputs.add('OUT',
+                         optional=True)
+
+    def run(self):
+        import json
+
+        # FIXME: move this to the class def somehow
+        def get_type(p):
+            if isinstance(p, (StartSubStream, EndSubStream)):
+                return list
+            elif isinstance(p, (StartMap, EndMap)):
+                return ListMap
+            raise TypeError
+
+        stack = collections.deque()
+        current_stream = None
+        while not self.is_terminated:
+            packet = self.inputs['IN'].receive_packet()
+            if packet is EndOfStream:
+                break
+
+            if isinstance(packet, (StartSubStream, StartMap)):
+                current_stream = get_type(packet)()
+                stack.append(current_stream)
+
+            elif isinstance(packet, (EndMap, EndSubStream)):
+                assert isinstance(current_stream, get_type(packet))
+                completed_stream = stack.pop()
+                if isinstance(current_stream, ListMap):
+                    for key, value in current_stream.items():
+                        current_stream[key] = value[0]
+                if not stack:
+                    # back at the root. time to dump
+                    s = json.dumps(completed_stream)
+                    current_stream = None
+                    print s
+                    if self.outputs['OUT'].is_connected():
+                        self.outputs['OUT'].send(s)
+                else:
+                    current_stream = stack[-1]
+                    current_stream.append(completed_stream)
+
+            elif isinstance(packet, SwitchMapNamespace):
+                assert isinstance(current_stream, ListMap)
+                current_stream.set_active_key(packet.namespace)
+
+            elif current_stream is not None:
+                if isinstance(current_stream, ListMap) and \
+                        current_stream.active_list_started() and \
+                        len(current_stream.active_list()) > 1:
+                    raise ValueError('map streams without bracketing are used '
+                                     'for static values and cannot contain '
+                                     'more than one object')
+                current_stream.append(packet.value)
+
+            else:
+                # an object on the root stream
+                s = json.dumps(packet.value)
+                if self.outputs['OUT'].is_connected():
+                    self.outputs['OUT'].send(s)
+
+            self.suspend()
+
+
+class FromJSON(Component):
+    def initialize(self):
+        self.inputs.add('IN')
+        self.outputs.add('OUT',
+                         optional=True)
+
+    def run(self):
+        import json
+        while not self.is_terminated:
+            packet = self.inputs['IN'].receive_packet()
+            if packet is EndOfStream:
+                break
+            print "value", `packet.value`
+            self.send_obj(json.loads(packet.value))
+
+    def send_obj(self, obj):
+        if isinstance(obj, list):
+            self.outputs['OUT'].send_packet(StartSubStream())
+            for item in obj:
+                self.send_obj(item)
+            self.outputs['OUT'].send_packet(EndSubStream())
+
+        elif isinstance(obj, dict):
+            self.outputs['OUT'].send_packet(StartMap())
+            for key, value in obj.iteritems():
+                self.outputs['OUT'].send_packet(SwitchMapNamespace(key))
+                self.send_obj(value)
+            self.outputs['OUT'].send_packet(EndMap())
+
+        else:
+            self.outputs['OUT'].send(obj)
 
 
 class MongoCollectionWriter(Component):
@@ -623,11 +743,11 @@ class MongoCollectionWriter(Component):
                     self.terminate()
                     break
 
-                elif isinstance(packet, StartBracket):
+                elif isinstance(packet, StartSubStream):
                     bracket_depth += 1
                     self.drop_packet(packet)
 
-                elif isinstance(packet, EndBracket):
+                elif isinstance(packet, EndSubStream):
                     bracket_depth -= 1
                     self.drop_packet(packet)
 
