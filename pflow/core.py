@@ -78,9 +78,14 @@ class Component(object):
         (ComponentState.SUSP_RECV, ComponentState.TERMINATED)
     ])
 
-    def __init__(self, name):
+    _state = ComponentState.NOT_INITIALIZED
+
+    def __init__(self, name, initialize=True):
         """
-        :param name: unique name of this component instance within the graph.
+        Parameters
+        ---------
+        name : str
+            unique name of this component instance within the graph.
         """
         if not isinstance(name, basestring):
             raise ValueError('name must be a string')
@@ -91,12 +96,12 @@ class Component(object):
         self.log = logging.getLogger('%s.%s(%s)' % (self.__class__.__module__,
                                                     self.__class__.__name__,
                                                     self.name))
-
-        self._state = ComponentState.NOT_INITIALIZED
-        self.initialize()
-        self.state = ComponentState.INITIALIZED
+        if initialize:
+            self.initialize()
+            self.state = ComponentState.INITIALIZED
 
         self.executor = None
+        # FIXME: not actually used:
         self.stack = queue.LifoQueue()  # Used for simple bracket packets
         self.owned_packet_count = 0
 
@@ -434,6 +439,12 @@ class Graph(Component):
 
         self.components.add(component)
         return component
+
+    def get_component(self, name):
+        for component in self.components:
+            if component.name == name:
+                return component
+        raise ValueError('Component name "{}" does not exist in this graph'.format(name))
 
     @assert_component_state(ComponentState.NOT_INITIALIZED)
     def remove_component(self, component):
