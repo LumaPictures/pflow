@@ -57,12 +57,11 @@ class ControlPacket(Packet):
     """
     __metaclass__ = ABCMeta
 
-    def __init__(self, channel=DEFALT_PACKET_CHANNEL):
+    def __init__(self):
         """
         channel : str
         """
         super(ControlPacket, self).__init__(self.__class__.__name__)
-        self.channel = channel
 
 
 class StartSubStream(ControlPacket):
@@ -94,7 +93,7 @@ class EndMap(ControlPacket):
 
 
 class SwitchMapNamespace(ControlPacket):
-    def __init__(self, namespace, channel=DEFALT_PACKET_CHANNEL):
+    def __init__(self, namespace):
         """
         namespace : str
 
@@ -107,5 +106,5 @@ class SwitchMapNamespace(ControlPacket):
         Keyed brackets can be used to create something like a dictionary (or
         `defaultdict(list)` to be more exact).
         """
-        super(SwitchMapNamespace, self).__init__(channel)
+        super(SwitchMapNamespace, self).__init__()
         self.namespace = namespace

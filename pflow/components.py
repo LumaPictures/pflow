@@ -173,12 +173,12 @@ class Split(Component):
 
         if isinstance(packet, StartSubStream):
             self.log.debug("Bracket open")
-            out_a.start_bracket()
-            out_b.start_bracket()
+            out_a.start_substream()
+            out_b.start_substream()
         elif isinstance(packet, EndSubStream):
             self.log.debug("Bracket close")
-            out_a.end_bracket()
-            out_b.end_bracket()
+            out_a.end_substream()
+            out_b.end_substream()
         else:
             self.log.debug('Send: %s' % packet.value)
             out_a.send(packet.value)
@@ -438,16 +438,16 @@ class Binner(Component):
             except exc.PortTimeout:
                 self.log.warn('Closing bracket because of receive timeout on %s' % self.inputs['IN'])
                 if started and bracket_sent_packets > 0:
-                    outport.end_bracket()
+                    outport.end_substream()
                     bracket_sent_packets = 0
-                    outport.start_bracket()
+                    outport.start_substream()
                 continue
 
             if value_tuple is EndOfStream:
                 if started:
                     # End bin
                     self.log.debug('Ending bin')
-                    outport.end_bracket()
+                    outport.end_substream()
                     bracket_sent_packets = 0
 
                 self.terminate()
@@ -465,15 +465,15 @@ class Binner(Component):
                 started = True
                 # Start initial bin
                 self.log.debug('Starting initial bin')
-                outport.start_bracket()
+                outport.start_substream()
                 total = size
             elif size + total > max_size:
                 total = size
                 # Start new bin
                 self.log.debug('Starting new bin (%d > %d)' % (total, max_size))
-                outport.end_bracket()
+                outport.end_substream()
                 bracket_sent_packets = 0
-                outport.start_bracket()
+                outport.start_substream()
             else:
                 total += size
 
@@ -671,22 +671,21 @@ class FromJSON(Component):
             packet = self.inputs['IN'].receive_packet()
             if packet is EndOfStream:
                 break
-            print "value", `packet.value`
             self.send_obj(json.loads(packet.value))
 
     def send_obj(self, obj):
         if isinstance(obj, list):
-            self.outputs['OUT'].send_packet(StartSubStream())
+            self.outputs['OUT'].start_substream()
             for item in obj:
                 self.send_obj(item)
-            self.outputs['OUT'].send_packet(EndSubStream())
+            self.outputs['OUT'].end_substream()
 
         elif isinstance(obj, dict):
-            self.outputs['OUT'].send_packet(StartMap())
+            self.outputs['OUT'].start_map()
             for key, value in obj.iteritems():
-                self.outputs['OUT'].send_packet(SwitchMapNamespace(key))
+                self.outputs['OUT'].switch_map_namespace(key)
                 self.send_obj(value)
-            self.outputs['OUT'].send_packet(EndMap())
+            self.outputs['OUT'].end_map()
 
         else:
             self.outputs['OUT'].send(obj)

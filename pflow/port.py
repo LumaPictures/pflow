@@ -7,7 +7,8 @@ try:
 except ImportError:
     from Queue import Queue  # 2.x
 
-from .packet import EndOfStream, Packet, StartSubStream, EndSubStream
+from .packet import (EndOfStream, Packet, StartSubStream, EndSubStream,
+                     StartMap, EndMap, SwitchMapNamespace)
 from . import exc
 
 log = logging.getLogger(__name__)
@@ -282,20 +283,42 @@ class OutputPort(Port):
         packet = self.component.create_packet(value)
         self.send_packet(packet)
 
-    def start_bracket(self):
+    def start_substream(self):
         self._bracket_depth += 1
 
         packet = StartSubStream()
         packet.owner = self.component
         self.send_packet(packet)
 
-    def end_bracket(self):
+    def end_substream(self):
         self._bracket_depth -= 1
         if self._bracket_depth < 0:
-            raise ValueError('end_bracket() called too many times '
+            raise ValueError('end_substream / end_map called too many times '
                              'on {}'.format(self))
 
         packet = EndSubStream()
+        packet.owner = self.component
+        self.send_packet(packet)
+
+    def start_map(self):
+        self._bracket_depth += 1
+
+        packet = StartMap()
+        packet.owner = self.component
+        self.send_packet(packet)
+
+    def end_map(self):
+        self._bracket_depth -= 1
+        if self._bracket_depth < 0:
+            raise ValueError('end_substream / end_map called too many times '
+                             'on {}'.format(self))
+
+        packet = EndMap()
+        packet.owner = self.component
+        self.send_packet(packet)
+
+    def switch_map_namespace(self, key):
+        packet = SwitchMapNamespace(key)
         packet.owner = self.component
         self.send_packet(packet)
 

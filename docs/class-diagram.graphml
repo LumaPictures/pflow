@@ -554,7 +554,7 @@ receive()</y:MethodLabel>
             <y:MethodLabel>send_packet(packet : Packet)
 send(value)
 start_bracket()
-end_bracket()</y:MethodLabel>
+end_substream()</y:MethodLabel>
           </y:UML>
         </y:UMLClassNode>
       </data>
