@@ -55,36 +55,27 @@ class GraphExecutor(object):
                         'state is {}, but expected INITIALIZED'.format(
                             component.state))
 
-                # FIXME: we should transition to the expectation that
-                # all run() funcs contain their own while loop (see the
-                # keepalive decorator). The code below could be simplified to
-                # just this:
-                # component.state = ComponentState.ACTIVE
-                # component.run()
-                # component.terminate()
-
-                # --- begin code in question ---
-                run_func = component.run
-                keepalive = (hasattr(run_func, '_component_keepalive') and
-                             run_func._component_keepalive)
-
                 component.state = ComponentState.ACTIVE
-                while not component.is_terminated:
-
-                    # Run the component
-                    run_func()
-
-                    if keepalive and not component.is_terminated:
-                        # Suspend execution until there's more data to process.
-                        component.suspend()
-                    else:
-                        component.terminate()
-                # --- end code in question ---
+                component.run()
+                if component.is_alive():
+                    component.terminate()
 
             finally:
                 component.destroy()
 
         return component_loop
+
+    def _final_checks(self):
+        """
+        Post-execution checks.
+        Writes warnings to the log if there were potential issues.
+        """
+        for component in self.graph.components:
+            if component.owned_packet_count != 0:
+                self.log.warn('Leak detected: {} was terminated, but still owns {} packets! '
+                              'One of its downstream components may have not called '
+                              'drop_packet()'.format(component,
+                                                     component.owned_packet_count))
 
     def _reset_components(self):
         def reset_ports(ports):

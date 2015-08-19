@@ -61,6 +61,11 @@ class SingleProcessGraphExecutor(GraphExecutor):
         self._running = True
         self.log.debug('Executing {}'.format(self.graph))
 
+        # Initialize graph
+        if self.graph.state == ComponentState.NOT_INITIALIZED:
+            self.graph.initialize()
+            self.graph.state = ComponentState.INITIALIZED
+
         self._recv_queues = collections.defaultdict(queue.Queue)
         self._coroutines = dict(
             [(gevent.spawn(self._create_component_runner(comp),
@@ -69,19 +74,23 @@ class SingleProcessGraphExecutor(GraphExecutor):
               comp) for comp in self.graph.components]
         )
 
+        last_exception = None
+
         def thread_error_handler(coroutine):
             """
             Handles component coroutine exceptions that get raised.
             This should terminate execution of all other coroutines.
             """
+            last_exception = coroutine.exception
+
             component = self._coroutines[coroutine]
             self.log.error('Component "{}" failed with {}: {}'.format(
                 component.name, coroutine.exception.__class__.__name__,
                 coroutine.exception.message))
 
             for c in self._coroutines.values():
-                if not c.is_terminated:
-                    c.terminate(ex=coroutine.exception)
+                if c.is_alive():
+                    c.terminate(ex=last_exception)
 
         # Wire up error handler (so that exceptions aren't swallowed)
         for coroutine in self._coroutines.keys():
@@ -90,26 +99,15 @@ class SingleProcessGraphExecutor(GraphExecutor):
         # Wait for all coroutines to terminate
         gevent.wait(self._coroutines.keys())
 
+        self.graph.terminate(ex=last_exception)
         self._final_checks()
         self._reset_components()
+
         self._running = False
         self.log.debug('Finished graph execution')
 
     def is_running(self):
         return self._running
-
-    def _final_checks(self):
-        """
-        Post-execution checks.
-        Writes warnings to the log if there were potential issues.
-        """
-        # Check for unsent packets
-        for coroutine, component in self._coroutines.items():
-            if component.owned_packet_count != 0:
-                self.log.warn('Leak detected: {} was terminated, but still owns {} packets! '
-                              'One of its downstream components may have not called '
-                              'drop_packet()'.format(component,
-                                                     component.owned_packet_count))
 
     def _get_or_create_queue(self, port):
         if not isinstance(port, Port):
@@ -156,7 +154,7 @@ class SingleProcessGraphExecutor(GraphExecutor):
         self.log.debug('{} is waiting for data on {}'.format(component,
                                                              source_port))
         start_time = time.time()
-        while not component.is_terminated:
+        while component.is_alive():
             try:
                 packet = q.get(block=False)
                 self.log.debug('{} received packet on {}: {}'.format(

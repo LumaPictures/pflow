@@ -6,7 +6,7 @@ class Simple(Component):
         self.inputs.add('in')
 
     def run(self):
-        while not self.is_terminated:
+        while self.is_alive():
             print "connected %s" % self.inputs['in'].is_connected()
             print "open: %s" % self.inputs['in'].is_open()
 

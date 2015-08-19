@@ -44,18 +44,22 @@ class HypeTrackToDocumentTransformer(Component):
         self.inputs.add_ports(InputPort('IN'))
         self.outputs.add_ports(OutputPort('OUT'))
 
-    @keepalive
     def run(self):
-        track = self.inputs['IN'].receive()
-        if track is EndOfStream:
-            self.terminate()
-            return
-        elif track['artist'] and track['title']:
-            transformed = {
-                'label': '%(artist)s - %(title)s' % track,
-                'foo': 'bar'
-            }
-            self.outputs['OUT'].send(transformed)
+        current_rank = 1
+
+        while self.is_alive():
+            track = self.inputs['IN'].receive()
+            if track is EndOfStream:
+                self.terminate()
+                return
+            elif track['artist'] and track['title']:
+                transformed = {
+                    'label': '%(artist)s - %(title)s' % track,
+                    'rank': current_rank
+                }
+                self.outputs['OUT'].send(transformed)
+
+            current_rank += 1
 
 
 class PopularMusicGraph(Graph):

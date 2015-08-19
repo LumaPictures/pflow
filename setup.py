@@ -31,7 +31,7 @@ if sys.version_info.major < 3:
     test_requires.append('mock')  # mock (now in unittest.mock)
 
 # Sets __version__
-execfile('pflow/version.py')
+execfile('%s/version.py' % module_name)
 
 setup(
     name=module_name,

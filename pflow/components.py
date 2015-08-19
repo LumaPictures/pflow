@@ -29,7 +29,7 @@ class Repeat(Component):
         if packet is EndOfStream:
             self.terminate()
         else:
-            self.log.debug('Repeating: %s' % packet)
+            self.log.debug('Repeating: {}'.format(packet))
             self.outputs['OUT'].send_packet(packet)
 
 
@@ -53,7 +53,7 @@ class Constant(Component):
             limit = None
 
         count = 0
-        while not self.is_terminated:
+        while self.is_alive():
             count += 1
             if limit is not None and count > limit:
                 break
@@ -97,17 +97,13 @@ class Sleep(Component):
         if delay_value is EndOfStream:
             delay_value = 0
 
-        # if delay_value == 0:
-        #     self.log.warn('Using a %s component with no DELAY is the same as using Repeat' %
-        #                   self.__class__.__name__)
-
-        while not self.is_terminated:
+        while self.is_alive():
             packet = self.inputs['IN'].receive_packet()
             if packet is EndOfStream:
                 self.terminate()
                 break
 
-            self.log.debug('Sleeping for %d seconds...' % delay_value)
+            self.log.debug('Sleeping for {} seconds...'.format(delay_value))
             self.suspend(delay_value)
 
             self.outputs['OUT'].send_packet(packet)
@@ -137,16 +133,12 @@ class DynamicSleep(Component):
         if delay_value is EndOfStream:
             delay_value = 0
 
-        # if delay_value == 0:
-        #     self.log.warn('Using a %s component with no DELAY is the same as using Repeat' %
-        #                   self.__class__.__name__)
-
         packet = self.inputs['IN'].receive_packet()
         if packet is EndOfStream:
             self.terminate()
             return
 
-        self.log.debug('Sleeping for %d seconds...' % delay_value)
+        self.log.debug('Sleeping for {} seconds...'.format(delay_value))
         self.suspend(delay_value)
 
         self.outputs['OUT'].send_packet(packet)
@@ -180,7 +172,7 @@ class Split(Component):
             out_a.end_substream()
             out_b.end_substream()
         else:
-            self.log.debug('Send: %s' % packet.value)
+            self.log.debug(u'Send: {}'.format(packet.value))
             out_a.send(packet.value)
             out_b.send(packet.value)
 
@@ -225,7 +217,7 @@ class Cons(Component):
             return
 
         cons_val = (a, b)
-        self.log.debug('Cons: ' + str(cons_val))
+        self.log.debug(u'Cons: ' + str(cons_val))
 
         self.outputs['OUT'].send(cons_val)
 
@@ -252,7 +244,7 @@ class Decons(Component):
         assert len(value) == 2
 
         a, b = value
-        self.log.debug('Decons: %s, %s' % (a, b))
+        self.log.debug(u'Decons: {}, {}'.format(a, b))
 
         self.outputs['OUT_A'].send(a)
         self.outputs['OUT_B'].send(b)
@@ -277,7 +269,7 @@ class DictValueExtractor(Component):
             self.terminate()
             return
 
-        while not self.is_terminated:
+        while self.is_alive():
             d = self.inputs['IN'].receive()
             if d is EndOfStream:
                 self.terminate()
@@ -286,7 +278,7 @@ class DictValueExtractor(Component):
             assert isinstance(d, collections.MutableMapping)
 
             value = d.get(key)
-            self.log.debug('Extracted: %s -> %s' % (key, value))
+            self.log.debug(u'Extracted: {} -> {}'.format(key, value))
 
             self.outputs['OUT'].send(value)
 
@@ -312,20 +304,20 @@ class RegexFilter(Component):
 
         regex_value = self.inputs['REGEX'].receive()
 
-        self.log.debug('Using regex filter: %s' % regex_value)
+        self.log.debug('Using regex filter: {}'.format(regex_value))
         pattern = re.compile(regex_value)
 
-        while not self.is_terminated:
+        while self.is_alive():
             packet = self.inputs['IN'].receive_packet()
             if packet is EndOfStream:
                 self.terminate()
                 break
 
             if pattern.search(packet.value) is not None:
-                self.log.debug('Matched: "%s"' % packet.value)
+                self.log.debug('Matched: {!r}'.format(packet.value))
                 self.outputs['OUT'].send_packet(packet)
             else:
-                self.log.debug('Dropped: "%s"' % packet.value)
+                self.log.debug('Dropped: {!r}'.format(packet.value))
                 self.drop_packet(packet)
 
 
@@ -364,8 +356,7 @@ class Multiply(Component):
 
         result = x * y
 
-        self.log.debug('Multiply %d * %d = %d' %
-                       (x, y, result))
+        self.log.debug('Multiply {} * {} = {}'.format(x, y, result))
 
         self.outputs['OUT'].send(result)
 
@@ -390,7 +381,7 @@ class Modulo(Component):
 
         result = float(value) % float(modulo)
 
-        self.log.debug('Modulo %d %% %d = %d' % (value, modulo, result))
+        self.log.debug('Modulo {} %% {} = {}'.format(value, modulo, result))
 
         self.outputs['OUT'].send(result)
 
@@ -418,7 +409,7 @@ class Binner(Component):
         if timeout is EndOfStream:
             timeout = None
         else:
-            self.log.debug('Will timeout receives after %d seconds' % timeout)
+            self.log.debug('Will timeout receives after {} seconds'.format(timeout))
 
         outport = self.outputs['OUT']
 
@@ -426,11 +417,11 @@ class Binner(Component):
         bracket_sent_packets = 0
         started = False
 
-        while not self.is_terminated:
+        while self.is_alive():
             try:
                 value_tuple = self.inputs['IN'].receive(timeout=timeout)
             except exc.PortTimeout:
-                self.log.warn('Closing bracket because of receive timeout on %s' % self.inputs['IN'])
+                self.log.warn('Closing bracket because of receive timeout on {}'.format(self.inputs['IN']))
                 if started and bracket_sent_packets > 0:
                     outport.end_substream()
                     bracket_sent_packets = 0
@@ -464,14 +455,14 @@ class Binner(Component):
             elif size + total > max_size:
                 total = size
                 # Start new bin
-                self.log.debug('Starting new bin (%d > %d)' % (total, max_size))
+                self.log.debug('Starting new bin ({} > {})'.format(total, max_size))
                 outport.end_substream()
                 bracket_sent_packets = 0
                 outport.start_substream()
             else:
                 total += size
 
-            self.log.debug('Binned: %s' % value)
+            self.log.debug(u'Binned: {}'.format(value))
             outport.send(value)
             bracket_sent_packets += 1
 
@@ -497,15 +488,15 @@ class FileTailReader(Component):
             self.terminate()
             return
 
-        self.log.debug('Tailing file: %s' % file_path)
+        self.log.debug(u'Tailing file: {}'.format(file_path))
 
         for line in sh.tail('-f', file_path, _iter=True):
             stripped_line = line.rstrip()
-            self.log.debug('Tailed line: %s' % stripped_line)
+            self.log.debug(u'Tailed line: {}'.format(stripped_line))
 
             self.outputs['OUT'].send(stripped_line)
 
-            if self.is_terminated:
+            if self.is_terminated():
                 break
 
 
@@ -531,7 +522,7 @@ class ConsoleLineWriter(Component):
             silence = False
 
         depth = 0
-        while not self.is_terminated:
+        while self.is_alive():
             packet = self.inputs['IN'].receive_packet()
             if packet is EndOfStream:
                 self.terminate()
@@ -561,7 +552,7 @@ class ConsoleLineWriter(Component):
         sys.stdout.write(text)
 
     def _write_line(self, line):
-        self._write('%s%s' % (line, os.linesep))
+        self._write(u'{}{}'.format(line, os.linesep))
         sys.stdout.flush()
 
 
@@ -605,7 +596,7 @@ class ToJSON(Component):
 
         stack = collections.deque()
         current_stream = None
-        while not self.is_terminated:
+        while self.is_alive():
             packet = self.inputs['IN'].receive_packet()
             if packet is EndOfStream:
                 break
@@ -661,7 +652,7 @@ class FromJSON(Component):
 
     def run(self):
         import json
-        while not self.is_terminated:
+        while self.is_alive():
             packet = self.inputs['IN'].receive_packet()
             if packet is EndOfStream:
                 break
@@ -710,7 +701,7 @@ class MongoCollectionWriter(Component):
         import pymongo
 
         mongo_uri = self.inputs['MONGO_URI'].receive()
-        self.log.debug('Connecting to mongodb server: %s' % mongo_uri)
+        self.log.debug(u'Connecting to mongodb server: {}'.format(mongo_uri))
 
         mongo_client = pymongo.MongoClient(host=mongo_uri)
         self.log.debug('Connected!')
@@ -721,14 +712,14 @@ class MongoCollectionWriter(Component):
 
         delete_collection = self.inputs['DELETE_COLLECTION'].receive()
         if delete_collection is not EndOfStream and delete_collection == True:
-            self.log.warn('Deleting collection: %s' % collection_name)
+            self.log.warn(u'Deleting collection: {}'.format(collection_name))
             collection.remove()
 
         bracket_depth = 0
         batch = []
 
         try:
-            while not self.is_terminated:
+            while self.is_alive():
                 packet = self.inputs['IN'].receive_packet()
                 if packet is EndOfStream:
                     self.terminate()
@@ -744,7 +735,7 @@ class MongoCollectionWriter(Component):
 
                     if bracket_depth == 0:
                         # Do batch insert
-                        self.log.debug('Batch inserting %d records...' % len(batch))
+                        self.log.debug('Batch inserting {} records...'.format(len(batch)))
                         if len(batch) > 0:
                             collection.insert_many(batch)
 
@@ -761,13 +752,13 @@ class MongoCollectionWriter(Component):
 
                     if bracket_depth == 0:
                         # Do a direct insert if there is no bracket open.
-                        self.log.debug('Immediate insert: %s' % value)
+                        self.log.debug(u'Immediate insert: {}'.format(value))
                         collection.insert_one(value)
                     else:
                         # If there is a bracket open, buffer the insert so that it can be flushed
                         # with a bulk insert when the bracket is closed.
                         batch.append(value)
-                        self.log.debug('Delayed insert: %s (rows=%s)' % (value, batch))
+                        self.log.debug(u'Delayed insert: {} (rows={})'.format(value, batch))
 
         finally:
             mongo_client.close()
@@ -807,7 +798,7 @@ class RandomNumberGenerator(Component):
                         optional=True,
                         description='Number of times to iterate (default: '
                                     'infinite)')
-        self.outputs.add_ports(OutputPort('OUT'))
+        self.outputs.add('OUT')
 
     def run(self):
         import random
@@ -824,10 +815,10 @@ class RandomNumberGenerator(Component):
 
         if limit_value is None or limit_value > 0:
             i = 1
-            while not self.is_terminated:
+            while self.is_alive():
                 random_value = prng.randint(1, 100)
-                self.log.debug('Generated: %d (%d/%s)' % (random_value, i,
-                                                          limit_value))
+                self.log.debug('Generated: {} ({}/{})'.format(random_value, i,
+                                                              limit_value))
 
                 packet = self.create_packet(random_value)
                 self.outputs['OUT'].send_packet(packet)

@@ -111,6 +111,10 @@ class MultiProcessGraphExecutor(GraphExecutor):
         for process in self._processes:
             process.join()
 
+        self.graph.terminate()  # TODO: get last exception
+        self._final_checks()
+        self._reset_components()
+
         self._running = False
         self.log.debug('Finished graph execution')
 
@@ -178,7 +182,7 @@ class MultiProcessGraphExecutor(GraphExecutor):
         q.close()
 
     def terminate_thread(self, component):
-        if not component.is_terminated:
+        if component.is_alive():
             # This will cause the component loop to exit on the next iteration.
             component.state = ComponentState.TERMINATED
 

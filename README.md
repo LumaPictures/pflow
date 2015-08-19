@@ -98,7 +98,7 @@ Rules for creating components:
 * Your component should generally [be small and do one thing well](http://c2.com/cgi/wiki?UnixDesignPhilosophy).
 * The `Component.initialize()` method is used for setting up ports and any initial state.
 * The `Component.run()` method is called by the runtime only once before the component is automatically terminated.
-  If you don't want this behavior, you can either write your code in a `while not self.is_terminated: ...` loop or
+  If you don't want this behavior, you can either write your code in a `while self.is_alive(): ...` loop or
   simply decorate the `run()` method with `@keepalive`. If you decide to use the decorator, you must explicitly
   `terminate()` the component when you are finished.
 * Call `Component.suspend()` if you need to be explicit about suspending execution (typically done in loops or when 

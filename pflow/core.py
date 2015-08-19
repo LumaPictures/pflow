@@ -2,6 +2,7 @@ from abc import ABCMeta, abstractmethod
 import logging
 import json
 import inspect
+import functools
 
 try:
     import queue  # 3.x
@@ -31,16 +32,13 @@ def keepalive(fn):
         raise ValueError('The keepalive decorator was only intended for the '
                          'Component.run() method')
 
-    # FIXME: remove keepalive knowledge from the executor and use something like this:
-    # @functools.wraps(fn)
-    # def wrapper(self):
-    #     while not self.is_terminated:
-    #         fn(self)
-    # return wrapper
-    # See more notes in executors.base.GraphExecutor._create_component_runner
+    @functools.wraps(fn)
+    def keepalive_wrapper(self):
+        while self.is_alive():
+            fn(self)
+            self.suspend()
 
-    fn._component_keepalive = True
-    return fn
+    return keepalive_wrapper
 
 
 class Component(object):
@@ -86,6 +84,8 @@ class Component(object):
         ---------
         name : str
             unique name of this component instance within the graph.
+        initialize : bool
+            should this component be automaticaly initialized?
         """
         if not isinstance(name, basestring):
             raise ValueError('name must be a string')
@@ -96,6 +96,8 @@ class Component(object):
         self.log = logging.getLogger('%s.%s(%s)' % (self.__class__.__module__,
                                                     self.__class__.__name__,
                                                     self.name))
+
+        # Initialize component
         if initialize:
             self.initialize()
             self.state = ComponentState.INITIALIZED
@@ -238,8 +240,6 @@ class Component(object):
 
         del packet
 
-    # FIXME: This would be clearer as a method (properties should be reserved for attribute-like values)
-    @property
     def is_terminated(self):
         """
         Returns whether the component has been terminated.
@@ -262,10 +262,8 @@ class Component(object):
         is_alive : bool
             whether the component is still alive.
         """
-        return not self.is_terminated
+        return not self.is_terminated()
 
-    # FIXME: This would be clearer as a method (properties should be reserved for attribute-like values)
-    @property
     def is_suspended(self):
         """
         Returns whether the component is in a suspended state.
@@ -285,7 +283,7 @@ class Component(object):
         Terminate execution for this component.
         This will not terminate upstream components!
         """
-        if self.is_terminated:
+        if self.is_terminated():
             return
 
         if ex is not None:
@@ -411,7 +409,7 @@ class Graph(Component):
         is_terminated : bool
             whether or not the upstream components have been terminated.
         """
-        return all(c.is_terminated for c in cls.get_upstream(component))
+        return all(c.is_terminated() for c in cls.get_upstream(component))
 
     @assert_component_state(ComponentState.NOT_INITIALIZED)
     def add_component(self, component):
@@ -440,6 +438,11 @@ class Graph(Component):
         if component.name in used_names:
             raise ValueError('Component name "{}" has already been used in '
                              'this graph'.format(component.name))
+
+        # Initialize component
+        if component.state == ComponentState.NOT_INITIALIZED:
+            component.initialize()
+            component.state = ComponentState.INITIALIZED
 
         self.components.add(component)
         return component
@@ -531,20 +534,20 @@ class Graph(Component):
 
         self.remove_component(iip_gen)
 
-    @assert_component_state(ComponentState.NOT_INITIALIZED)
-    def set_port_defaults(self, component):
-        """
-        Create a default initial packets on all of the component's optional
-        unconnected ports.
-
-        Parameters
-        ----------
-        component : ``Component``
-            the Component to set port defaults on.
-        """
-        for port in component.inputs:
-            if port.optional and not port.is_connected():
-                self.set_initial_packet(port, port.default)
+    # @assert_component_state(ComponentState.NOT_INITIALIZED)
+    # def set_port_defaults(self, component):
+    #     """
+    #     Create a default initial packets on all of the component's optional
+    #     unconnected ports.
+    #
+    #     Parameters
+    #     ----------
+    #     component : ``Component``
+    #         the Component to set port defaults on.
+    #     """
+    #     for port in component.inputs:
+    #         if port.optional and not port.is_connected():
+    #             self.set_initial_packet(port, port.default)
 
     @assert_component_state(ComponentState.NOT_INITIALIZED)
     def connect(self, source_output_port, target_input_port):
@@ -565,8 +568,9 @@ class Graph(Component):
             raise ValueError('target_input_port must be an input port')
 
         if target_input_port.source_port is not None:
-            raise exc.PortError('target_input_port is already connected to '
-                                'another source')
+            raise exc.PortError(target_input_port,
+                                'target_input_port is already connected to '
+                                'another source {}'.format(target_input_port.source_port))
 
         log.debug('{} connected to {}'.format(source_output_port,
                                               target_input_port))
@@ -599,7 +603,7 @@ class Graph(Component):
                 port.source_port = None
 
     @property
-    def self_starters(self):
+    def get_self_starters(self):
         """
         Returns a set of all self-starter components.
         """
@@ -624,7 +628,6 @@ class Graph(Component):
         raise RuntimeError('Instead of calling Graph.run(), please use a '
                            'GraphRuntime to run this Graph')
 
-    @property
     def is_terminated(self):
         """
         Has this graph been terminated?
@@ -634,7 +637,10 @@ class Graph(Component):
         is_terminated : bool
             whether the graph has terminated.
         """
-        return all([component.is_terminated for component in self.components])
+        return all([component.is_terminated() for component in self.components])
+
+    def is_suspended(self):
+        return any([component.is_suspended() for component in self.components])
 
     # TODO: move all serializers to their own module / abstract class
 

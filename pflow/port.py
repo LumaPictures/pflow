@@ -402,14 +402,21 @@ class PortRegistry(object):
         """
         Get a port from the registry by name (using [] notation).
         """
+        from .states import ComponentState
+
         if not isinstance(port_name, basestring):
             raise ValueError('key must be a string')
 
         try:
             return self._ports[port_name]
         except KeyError:
-            raise AttributeError('{} does not have a port named "{}"'.format(
-                                 self._component, port_name))
+            if self._component.state == ComponentState.NOT_INITIALIZED:
+                raise exc.ComponentStateError(self._component,
+                                              'Attempted to access port "{}" before component was '
+                                              'initialized'.format(port_name))
+            else:
+                raise AttributeError('{} does not have a port named "{}"'.format(
+                                     self._component, port_name))
 
     def __setitem__(self, port_name, port):
         if port.name is None:
