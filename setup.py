@@ -2,8 +2,6 @@
 import sys
 from setuptools import setup
 
-import pflow.version
-
 module_name = 'pflow'
 
 # Dependencies
