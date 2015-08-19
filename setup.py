@@ -32,10 +32,12 @@ if sys.version_info.major < 3:
     install_requires.append('enum34')  # enum.Enum
     test_requires.append('mock')  # mock (now in unittest.mock)
 
+# Sets __version__
+execfile('pflow/version.py')
 
 setup(
     name=module_name,
-    version=pflow.version.__version__,
+    version=__version__,
 
     author='Chris Lyon',
     author_email='chrisl@luma-pictures.com',
