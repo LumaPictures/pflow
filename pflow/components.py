@@ -187,7 +187,7 @@ class Split(Component):
         self.drop_packet(packet)
 
 
-# class Splitter(Component):
+# class Split(Component):
 #     """
 #     Splits inputs from IN to OUT[]
 #     """
@@ -271,8 +271,6 @@ class DictValueExtractor(Component):
                         description='Key to extract values for')
         self.outputs.add('OUT')
 
-    # FIXME: does this need a keepalive?
-    @keepalive
     def run(self):
         key = self.inputs['KEY'].receive()
         if key is EndOfStream:
@@ -309,8 +307,6 @@ class RegexFilter(Component):
                          allowed_types=[str],
                          description='String that matched filter')
 
-    # FIXME: does this need a keepalive?
-    @keepalive
     def run(self):
         import re
 
@@ -415,8 +411,6 @@ class Binner(Component):
         self.outputs.add('OUT',
                          description='Stream of values, bracketed by size')
 
-    # FIXME: does this need a keepalive?
-    @keepalive
     def run(self):
         max_size = self.inputs['MAX_SIZE'].receive()
 
@@ -531,8 +525,6 @@ class ConsoleLineWriter(Component):
         self.outputs.add('OUT',
                          optional=True)
 
-    # FIXME: does this need a keepalive?
-    @keepalive
     def run(self):
         silence = self.inputs['SILENCE'].receive()
         if silence is EndOfStream:
@@ -560,6 +552,8 @@ class ConsoleLineWriter(Component):
                 # Forward to output port
                 if self.outputs['OUT'].is_connected():
                     self.outputs['OUT'].send_packet(packet)
+                else:
+                    self.drop_packet(packet)
 
                 self.suspend()
 
@@ -712,8 +706,6 @@ class MongoCollectionWriter(Component):
                         description='If True, delete all documents in '
                                     'collection before writing to it')
 
-    # FIXME: does this need a keepalive?
-    @keepalive
     def run(self):
         import pymongo
 

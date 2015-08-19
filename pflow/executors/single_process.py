@@ -90,12 +90,26 @@ class SingleProcessGraphExecutor(GraphExecutor):
         # Wait for all coroutines to terminate
         gevent.wait(self._coroutines.keys())
 
+        self._final_checks()
         self._reset_components()
         self._running = False
         self.log.debug('Finished graph execution')
 
     def is_running(self):
         return self._running
+
+    def _final_checks(self):
+        """
+        Post-execution checks.
+        Writes warnings to the log if there were potential issues.
+        """
+        # Check for unsent packets
+        for coroutine, component in self._coroutines.items():
+            if component.owned_packet_count != 0:
+                self.log.warn('Leak detected: {} was terminated, but still owns {} packets! '
+                              'One of its downstream components may have not called '
+                              'drop_packet()'.format(component,
+                                                     component.owned_packet_count))
 
     def _get_or_create_queue(self, port):
         if not isinstance(port, Port):
@@ -124,12 +138,12 @@ class SingleProcessGraphExecutor(GraphExecutor):
         try:
             # TODO: Make this call non-blocking
             q.put(packet)
-            component.suspend()
+            self.suspend_thread()
             component.state = ComponentState.ACTIVE
         except queue.Full:
             # Timed out
             component.state = ComponentState.ACTIVE
-            raise exc.PortTimeout
+            raise exc.PortTimeout(dest_port)
 
     def receive_port(self, component, port_name, timeout=None):
         source_port = component.inputs[port_name]
@@ -153,7 +167,7 @@ class SingleProcessGraphExecutor(GraphExecutor):
                 curr_time = time.time()
                 if timeout is not None and curr_time - start_time >= timeout:
                     component.state = ComponentState.ACTIVE
-                    raise exc.PortTimeout
+                    raise exc.PortTimeout(source_port)
 
                 if self.graph.is_upstream_terminated(component):
                     # No more data left to receive_packet and upstream has
@@ -167,7 +181,7 @@ class SingleProcessGraphExecutor(GraphExecutor):
                 else:
                     # self.log.debug('%s is waiting for packet on %s' % (component, source_port))
                     component.state = ComponentState.SUSP_RECV
-                    component.suspend()
+                    self.suspend_thread()
 
     def close_input_port(self, component, port_name):
         self.log.debug('Closing input port {}.{}'.format(component.name,

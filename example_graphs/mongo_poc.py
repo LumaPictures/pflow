@@ -3,7 +3,7 @@ from pflow.components import *
 
 class MongoPocGraph(Graph):
     def initialize(self):
-        count = 200
+        count = 15
         max_delay = 5
 
         num_source = RandomNumberGenerator('NUM_SOURCE')
@@ -31,7 +31,7 @@ class MongoPocGraph(Graph):
         # self.connect(num_source.outputs['OUT'], binner.inputs['IN'])
 
         mongo_writer = MongoCollectionWriter('MONGO_WRITER')
-        mongo_writer.inputs['IN'].max_queue_size = 1
+        # mongo_writer.inputs['IN'].max_queue_size = 1
         self.set_initial_packet(mongo_writer.inputs['MONGO_URI'], 'mongodb://localhost:27017')
         self.set_initial_packet(mongo_writer.inputs['MONGO_DATABASE'], 'mongo_poc')
         self.set_initial_packet(mongo_writer.inputs['MONGO_COLLECTION'], 'nums')
@@ -40,8 +40,8 @@ class MongoPocGraph(Graph):
         console_writer = ConsoleLineWriter('CONSOLE_WRITER')
         #self.set_initial_packet(console_writer.inputs['SILENCE'], True)
 
-        splitter = Splitter('SPLITTER')
-        splitter.inputs['IN'].max_queue_size = 1
+        splitter = Split('SPLITTER')
+        # splitter.inputs['IN'].max_queue_size = 1
         self.connect(binner.outputs['OUT'], splitter.inputs['IN'])
         self.connect(splitter.outputs['OUT_A'], mongo_writer.inputs['IN'])
         self.connect(splitter.outputs['OUT_B'], console_writer.inputs['IN'])

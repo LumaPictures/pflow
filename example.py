@@ -33,8 +33,9 @@ def run_graph(graph):
 
 
 def main():
-    pflow.utils.init_logger(filename='example.log',
-                            default_level=logging.DEBUG)
+    pflow.utils.init_logger(filename='debug.log',
+                            default_level=logging.DEBUG,
+                            console_level=logging.INFO)
 
     sag = example_graphs.awesome.SuperAwesomeDemoGraph('AWESOME_1')
 
@@ -42,8 +43,8 @@ def main():
         example_graphs.simple.SimpleGraph('SIMPLE'),
         sag,
         sag,
-        # example_graphs.popular_music.PopularMusicGraph('MUSIC_1'),
-        # example_graphs.mongo_poc.MongoPocGraph('MONGO_POC'),
+        #example_graphs.popular_music.PopularMusicGraph('MUSIC_1'),
+        #example_graphs.mongo_poc.MongoPocGraph('MONGO_POC'),
         # example_graphs.process_spawning_logger.ProcessSpawningLogger('PROCSPAWN_1'),
     ]
 

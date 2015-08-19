@@ -87,7 +87,6 @@ class Port(BasePort):
             raise exc.PortError(self, 'port is already open')
 
         self._is_open = True
-        # TODO
 
     def close(self):
         if not self._is_open:
@@ -267,7 +266,7 @@ class OutputPort(Port):
             self._check_ready_state()
 
         if not self.is_open():
-            raise exc.PortClosedError(self, 'port is closed')
+            raise exc.PortClosedError(self)
 
         if packet is EndOfStream:
             raise ValueError('You can not send an EndOfStream downstream!')
@@ -275,7 +274,13 @@ class OutputPort(Port):
         if not isinstance(packet, Packet):
             raise ValueError('packet must be a Packet instance')
 
-        # FIXME: assert owner / set it if it's None
+        # All packets must have an owner. Automatically set owner to this port's
+        # component if none set already.
+        if packet.owner is None:
+            self.log.warn('No owner set on packet {}. Setting it to {}.'.format(packet, self.component))
+            packet.owner = self.component
+            self.component.owned_packet_count += 1
+
         executor = self.component.executor
         executor.send_port(self.component, self.name, packet)
 
@@ -288,6 +293,8 @@ class OutputPort(Port):
 
         packet = StartSubStream()
         packet.owner = self.component
+        packet.owner.owned_packet_count += 1
+
         self.send_packet(packet)
 
     def end_substream(self):
@@ -298,6 +305,8 @@ class OutputPort(Port):
 
         packet = EndSubStream()
         packet.owner = self.component
+        packet.owner.owned_packet_count += 1
+
         self.send_packet(packet)
 
     def start_map(self):

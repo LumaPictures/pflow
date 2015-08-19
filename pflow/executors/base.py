@@ -74,11 +74,10 @@ class GraphExecutor(object):
                     # Run the component
                     run_func()
 
-                    if not component.is_terminated:
+                    if keepalive and not component.is_terminated:
                         # Suspend execution until there's more data to process.
                         component.suspend()
-
-                    if not keepalive:
+                    else:
                         component.terminate()
                 # --- end code in question ---
 

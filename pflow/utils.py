@@ -42,7 +42,7 @@ def pluck(seq, key):
     return vals
 
 
-def init_logger(default_level=None, filename=None, logger_levels=None):
+def init_logger(default_level=None, console_level=None, filename=None, logger_levels=None):
     import logging
 
     console_format = '%(processName)-20s | %(levelname)-5s | %(name)s: %(message)s'
@@ -71,7 +71,10 @@ def init_logger(default_level=None, filename=None, logger_levels=None):
     if filename is not None:
         # Console logger
         console = logging.StreamHandler()
-        console.setLevel(logging.INFO)
+        if console_level is None:
+            console_level = default_level
+
+        console.setLevel(console_level)
         console.setFormatter(logging.Formatter(console_format))
         logging.getLogger('').addHandler(console)
 

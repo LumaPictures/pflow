@@ -224,9 +224,17 @@ class Component(object):
         if not isinstance(packet, Packet):
             raise ValueError('packet must be a Packet')
 
-        # FIXME: shouldn't this be: packet.owner.owned_packet_count -= 1?
-        if packet.owner == self:
-            self.owned_packet_count -= 1
+        owner = packet.owner
+
+        if owner is None:
+            self.log.warn('Dropping packet {} with no owner set!'.format(packet))
+        elif owner.owned_packet_count > 0:
+            owner.owned_packet_count -= 1
+        else:
+            raise ValueError('Reference count error: {} was unable to drop {} because its owner {} '
+                             'already has an owned_packet_count of 0'.format(self,
+                                                                             packet,
+                                                                             owner))
 
         del packet
 
@@ -270,9 +278,6 @@ class Component(object):
         return self.state in (ComponentState.SUSP_RECV,
                               ComponentState.SUSP_SEND)
 
-    # FIXME: shouldn't this be:
-    # @assert_component_state(ComponentState.ACTIVE, ComponentState.SUSP_RECV,
-    #                         ComponentState.SUSP_SEND)
     @assert_not_component_state(ComponentState.TERMINATED,
                                 ComponentState.ERROR)
     def terminate(self, ex=None):
@@ -296,8 +301,7 @@ class Component(object):
 
         self.executor.terminate_thread(self)
 
-    # FIXME: shouldn't this be:
-    # @assert_component_state(ComponentState.ACTIVE)
+    @assert_component_state(ComponentState.ACTIVE)
     def suspend(self, seconds=None):
         """
         Yield execution to scheduler.

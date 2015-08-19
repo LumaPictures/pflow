@@ -2,7 +2,7 @@
 import sys
 from setuptools import setup
 
-import pflow
+import pflow.version
 
 module_name = 'pflow'
 
@@ -35,7 +35,7 @@ if sys.version_info.major < 3:
 
 setup(
     name=module_name,
-    version=pflow.__version__,
+    version=pflow.version.__version__,
 
     author='Chris Lyon',
     author_email='chrisl@luma-pictures.com',

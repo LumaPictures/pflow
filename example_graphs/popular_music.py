@@ -44,6 +44,7 @@ class HypeTrackToDocumentTransformer(Component):
         self.inputs.add_ports(InputPort('IN'))
         self.outputs.add_ports(OutputPort('OUT'))
 
+    @keepalive
     def run(self):
         track = self.inputs['IN'].receive()
         if track is EndOfStream:
@@ -71,7 +72,7 @@ class PopularMusicGraph(Graph):
 
         console_writer = ConsoleLineWriter('CONSOLE_WRITER')
 
-        splitter = Splitter('SPLITTER')
+        splitter = Split('SPLITTER')
         transform = HypeTrackToDocumentTransformer('TRANSFORM')
         title_extractor = DictValueExtractor('TITLE_EXTRACTOR')
         self.set_initial_packet(title_extractor.inputs['KEY'], 'label')
