@@ -718,7 +718,7 @@ class MongoCollectionWriter(Component):
 
         delete_collection = self.inputs['DELETE_COLLECTION'].receive()
         if delete_collection is not EndOfStream and delete_collection == True:
-            self.log.warn(u'Deleting collection: {}'.format(collection_name))
+            self.log.debug(u'Deleting collection: {}'.format(collection_name))
             collection.remove()
 
         bracket_depth = 0

@@ -35,6 +35,7 @@ except ImportError:
     import Queue as queue  # 2.x
 
 import gevent
+import greenlet
 
 from .base import GraphExecutor
 from ..core import ComponentState
@@ -51,14 +52,47 @@ class SingleProcessGraphExecutor(GraphExecutor):
     multiprocessing/threading, or when components are mostly I/O bound (i.e.
     don't need process parallelization).
     """
+    DETECT_BLOCKING = True   # Should blocking greenlets be detected?
+    MAX_BLOCKING_TIME = 1.0  # Max number of seconds a greenlet can block before a warning is logged
+
     def __init__(self, graph):
         super(SingleProcessGraphExecutor, self).__init__(graph)
         self._recv_queues = None
         self._running = False
         self._coroutines = None
+        self._last_switch_time = None
+
+    def _blocking_greenlet_detector(self, event, (origin, target)):
+        """
+        Greenlet tracer that detects greenlets that block for too long.
+
+        These are CPU-bound or are making a non-monkeypatched synchronous call,
+        which can cause graph execution to slow down or deadlock. It's not possible
+        to detect deadlocks with this trace function, however.
+        """
+        if event != 'switch':
+            return  # Only care about context switches and not 'throw's
+
+        then = self._last_switch_time
+        now = self._last_switch_time = time.time()
+        if then is None:
+            return
+
+        blocking_time = now - then
+        if origin is not gevent.get_hub() and blocking_time > self.MAX_BLOCKING_TIME:
+            component = self._coroutines.get(origin)
+            if component is None:
+                return  # Non-component greenlet
+
+            self.log.warn('{} blocked the event loop for {:.2f} seconds!\n'
+                          'If the component was waiting on a blocking call, be sure to gevent.monkey patch it '
+                          'or convert it to an asynchronous call. CPU-bound components aren\'t well suited for '
+                          '{}, and should use a different executor altogether.'.format(component,
+                                                                                       blocking_time,
+                                                                                       self.__class__.__name__))
+            #traceback.print_stack()
 
     def execute(self):
-        self._running = True
         self.log.debug('Executing {}'.format(self.graph))
 
         # Initialize graph
@@ -66,52 +100,64 @@ class SingleProcessGraphExecutor(GraphExecutor):
             self.graph.initialize()
             self.graph.state = ComponentState.INITIALIZED
 
-        all_components = self.graph.get_all_components()
-        for component in self.graph.get_all_components(include_graphs=True):
-            component.executor = self
+        # Enable tracing
+        old_trace = greenlet.gettrace()
+        if self.DETECT_BLOCKING:
+            greenlet.settrace(self._blocking_greenlet_detector)
 
-        self.log.debug('Components in {}: {}'.format(self.graph,
-                                                     ', '.join(map(str, all_components))))
+        self._running = True
+        try:
+            all_components = self.graph.get_all_components()
+            for component in self.graph.get_all_components(include_graphs=True):
+                component.executor = self
 
-        self._recv_queues = collections.defaultdict(queue.Queue)
-        self._coroutines = dict(
-            [(gevent.spawn(self._create_component_runner(comp),
-                           None,   # in_queues
-                           None),  # out_queues
-              comp) for comp in all_components]
-        )
+            self.log.debug('Components in {}: {}'.format(self.graph,
+                                                         ', '.join(map(str, all_components))))
 
-        last_exception = None
+            self._recv_queues = collections.defaultdict(queue.Queue)
+            self._coroutines = dict(
+                [(gevent.spawn(self._create_component_runner(comp),
+                               None,   # in_queues
+                               None),  # out_queues
+                  comp) for comp in all_components]
+            )
 
-        def thread_error_handler(coroutine):
-            """
-            Handles component coroutine exceptions that get raised.
-            This should terminate execution of all other coroutines.
-            """
-            last_exception = coroutine.exception
+            last_exception = None
 
-            component = self._coroutines[coroutine]
-            self.log.error('Component "{}" failed with {}: {}'.format(
-                component.name, coroutine.exception.__class__.__name__,
-                coroutine.exception.message))
+            def thread_error_handler(coroutine):
+                """
+                Handles component coroutine exceptions that get raised.
+                This should terminate execution of all other coroutines.
+                """
+                last_exception = coroutine.exception
 
-            for c in self._coroutines.values():
-                if c.is_alive():
-                    c.terminate(ex=last_exception)
+                component = self._coroutines[coroutine]
+                self.log.error('Component "{}" failed with {}: {}'.format(
+                    component.name, coroutine.exception.__class__.__name__,
+                    coroutine.exception.message))
 
-        # Wire up error handler (so that exceptions aren't swallowed)
-        for coroutine in self._coroutines.keys():
-            coroutine.link_exception(thread_error_handler)
+                for c in self._coroutines.values():
+                    if c.is_alive():
+                        c.terminate(ex=last_exception)
 
-        # Wait for all coroutines to terminate
-        gevent.wait(self._coroutines.keys())
+            # Wire up error handler (so that exceptions aren't swallowed)
+            for coroutine in self._coroutines.keys():
+                coroutine.link_exception(thread_error_handler)
 
-        self.graph.terminate(ex=last_exception)
-        self._final_checks()
-        self._reset_components()
+            # Wait for all coroutines to terminate
+            gevent.wait(self._coroutines.keys())
 
-        self._running = False
-        self.log.debug('Finished graph execution')
+            self.graph.terminate(ex=last_exception)
+            self._final_checks()
+            self._reset_components()
+
+            self.log.debug('Finished graph execution')
+
+        finally:
+            self._running = False
+            if self.DETECT_BLOCKING:
+                # Unset tracer
+                greenlet.settrace(old_trace)
 
     def is_running(self):
         return self._running
