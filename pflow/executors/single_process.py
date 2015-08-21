@@ -66,12 +66,19 @@ class SingleProcessGraphExecutor(GraphExecutor):
             self.graph.initialize()
             self.graph.state = ComponentState.INITIALIZED
 
+        all_components = self.graph.get_all_components()
+        for component in self.graph.get_all_components(include_graphs=True):
+            component.executor = self
+
+        self.log.debug('Components in {}: {}'.format(self.graph,
+                                                     ', '.join(map(str, all_components))))
+
         self._recv_queues = collections.defaultdict(queue.Queue)
         self._coroutines = dict(
             [(gevent.spawn(self._create_component_runner(comp),
                            None,   # in_queues
                            None),  # out_queues
-              comp) for comp in self.graph.components]
+              comp) for comp in all_components]
         )
 
         last_exception = None

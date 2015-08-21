@@ -25,8 +25,8 @@ class GraphExecutor(object):
                                                 self.__class__.__name__))
 
         # Wire up executor to all graph components
-        for component in graph.components:
-            component.executor = self
+        # for component in graph.get_all_components():
+        #     component.executor = self
 
     def _create_component_runner(self, component):
         """

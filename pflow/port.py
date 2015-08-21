@@ -1,6 +1,7 @@
 from abc import ABCMeta, abstractmethod
 import logging
 import collections
+import copy
 
 try:
     from queue import Queue  # 3.x
@@ -68,6 +69,7 @@ class Port(BasePort):
 
         self.component = None  # Owning component
         self._is_open = True
+        self.proxied_port = None
 
         self.log = logging.getLogger('%s.%s' % (self.__class__.__module__,
                                                 self.__class__.__name__))
@@ -397,6 +399,29 @@ class PortRegistry(object):
         port = self._port_type(name, **kwargs)
         self.add_ports(port)
         return port
+
+    def export(self, name, exported_port):
+        if not isinstance(exported_port, self._port_type):
+            raise ValueError('Unable to export port {} because exported_port '
+                             'must be a {}'.format(name,
+                                                   self._port_type))
+
+        if exported_port.proxied_port is self:
+            raise ValueError('Unable to export port {} because exported_port {} '
+                             'is already proxied to self'.format(name))
+
+        port = copy.copy(exported_port)
+        port.name = name
+        port.component = self._component
+        port.proxied_port = exported_port
+
+        if isinstance(port, InputPort):
+            port.source_port = None
+        elif isinstance(port, OutputPort):
+            port.target_port = None
+
+        # TODO: delete existing ports
+        self.add_ports(port)
 
     def __getitem__(self, port_name):
         """

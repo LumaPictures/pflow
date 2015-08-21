@@ -165,16 +165,22 @@ class Split(Component):
 
         if isinstance(packet, StartSubStream):
             self.log.debug("Bracket open")
-            out_a.start_substream()
-            out_b.start_substream()
+            if out_a.is_open():
+                out_a.start_substream()
+            if out_b.is_open():
+                out_b.start_substream()
         elif isinstance(packet, EndSubStream):
             self.log.debug("Bracket close")
-            out_a.end_substream()
-            out_b.end_substream()
+            if out_a.is_open():
+                out_a.end_substream()
+            if out_b.is_open():
+                out_b.end_substream()
         else:
             self.log.debug(u'Send: {}'.format(packet.value))
-            out_a.send(packet.value)
-            out_b.send(packet.value)
+            if out_a.is_open():
+                out_a.send(packet.value)
+            if out_b.is_open():
+                out_b.send(packet.value)
 
         self.drop_packet(packet)
 

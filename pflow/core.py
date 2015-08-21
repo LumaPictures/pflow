@@ -12,7 +12,7 @@ except ImportError:
 from . import utils
 from . import exc
 from . import parsefbp
-from .port import (PortRegistry, InputPort, OutputPort, ArrayInputPort,
+from .port import (PortRegistry, Port, InputPort, OutputPort, ArrayInputPort,
                    ArrayOutputPort)
 from .packet import (Packet, EndOfStream, ControlPacket, StartSubStream,
                      EndSubStream, StartMap, EndMap, SwitchMapNamespace)
@@ -102,7 +102,8 @@ class Component(object):
             self.initialize()
             self.state = ComponentState.INITIALIZED
 
-        self.executor = None
+        self._executor = None
+
         # FIXME: not actually used:
         self.stack = queue.LifoQueue()  # Used for simple bracket packets
         self.owned_packet_count = 0
@@ -152,6 +153,17 @@ class Component(object):
                                              caller_stack))
 
         # TODO: Fire a transition event
+
+    @property
+    def executor(self):
+        if self._executor is None:
+            self.log.warn('Attempted to get an unset executor from {}'.format(self))
+
+        return self._executor
+
+    @executor.setter
+    def executor(self, new_executor):
+        self._executor = new_executor
 
     # @abstractmethod
     @assert_component_state(ComponentState.NOT_INITIALIZED)
@@ -436,7 +448,7 @@ class Graph(Component):
         # Unique name?
         used_names = utils.pluck(self.components, 'name')
         if component.name in used_names:
-            raise ValueError('Component name "{}" has already been used in '
+            raise ValueError('component name "{}" has already been used in '
                              'this graph'.format(component.name))
 
         # Initialize component
@@ -451,7 +463,35 @@ class Graph(Component):
         for component in self.components:
             if component.name == name:
                 return component
+
         raise ValueError('Component name "{}" does not exist in this graph'.format(name))
+
+    def get_all_components(self, include_graphs=False):
+        visited = set()
+        results = set()
+
+        def bfs_walk(graph):
+            if len(graph.components) == 0:
+                return  # finished
+
+            adjacent = set()
+            for node in graph.components:
+                if node in visited:
+                    continue  # cycle
+
+                visited.add(node)
+                if isinstance(node, Graph):
+                    adjacent.add(node)
+                    if include_graphs:
+                        results.add(node)
+                else:
+                    results.add(node)
+
+            for node in adjacent:
+                bfs_walk(node)
+
+        bfs_walk(self)
+        return results
 
     @assert_component_state(ComponentState.NOT_INITIALIZED)
     def remove_component(self, component):
@@ -613,7 +653,7 @@ class Graph(Component):
                     input_port.source_port is None)
 
         self_starters = set()
-        for node in self.components:
+        for node in self.get_all_components():
             # Self-starter nodes should have either no inputs or only
             # have disconnected optional inputs.
             if len(node.inputs) == 0:
@@ -637,10 +677,10 @@ class Graph(Component):
         is_terminated : bool
             whether the graph has terminated.
         """
-        return all([component.is_terminated() for component in self.components])
+        return all([component.is_terminated() for component in self.get_all_components()])
 
     def is_suspended(self):
-        return any([component.is_suspended() for component in self.components])
+        return any([component.is_suspended() for component in self.get_all_components()])
 
     # TODO: move all serializers to their own module / abstract class
 
@@ -736,8 +776,9 @@ class Graph(Component):
 
                 build_edges(next_components, visited_nodes)
 
-        build_nodes(self.components)
-        build_edges(self.components)
+        components = self.get_all_components()
+        build_nodes(components)
+        build_edges(components)
 
         self.log.debug('Writing %s to "%s"...' % (self, file_path))
         nx.write_graphml(graph, file_path)
