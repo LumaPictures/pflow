@@ -50,6 +50,9 @@ class Component(object):
     """
     __metaclass__ = ABCMeta
 
+    # Log a stack trace with state changes to determine what changed state.
+    LOG_STATE_CHANGE_STACK_TRACES = False
+
     # Valid state transitions for components.
     #
     # See ../docs/states.graphml for how this is visually represented.
@@ -93,6 +96,7 @@ class Component(object):
         self.name = name
         self.inputs = PortRegistry(self, InputPort, ArrayInputPort)
         self.outputs = PortRegistry(self, OutputPort, ArrayOutputPort)
+
         self.log = logging.getLogger('%s.%s(%s)' % (self.__class__.__module__,
                                                     self.__class__.__name__,
                                                     self.name))
@@ -134,23 +138,24 @@ class Component(object):
         self.log.debug('State transitioned from {} -> {}'.format(
             old_state.value, new_state.value))
 
-        # If supported by interpreter, show the caller to this property method
-        # to determine where the state was changed from.
-        curr_frame = inspect.currentframe()
-        if curr_frame is not None:
-            # Python interpreter has stack support.
-            frame_limit = 3
-            frames = inspect.getouterframes(curr_frame, 2)
-            caller_frames = frames[1:frame_limit + 1]
-            if len(caller_frames) > 1:
-                # (frame, filename, lineno, function, code_context, index)
-                indent = '\t' * 4
-                caller_stack = ('\n' + indent).join(
-                    '{}() in {}:{:d}'.format(fr[3], fr[1], fr[2])
-                    for fr in caller_frames)
-                self.log.debug('State was changed by (last {:d} frames):\n'
-                               '{}{}'.format(frame_limit, indent,
-                                             caller_stack))
+        if self.LOG_STATE_CHANGE_STACK_TRACES:
+            # If supported by interpreter, show the caller to this property method
+            # to determine where the state was changed from.
+            curr_frame = inspect.currentframe()
+            if curr_frame is not None:
+                # Python interpreter has stack support.
+                frame_limit = 3
+                frames = inspect.getouterframes(curr_frame, 2)
+                caller_frames = frames[1:frame_limit + 1]
+                if len(caller_frames) > 1:
+                    # (frame, filename, lineno, function, code_context, index)
+                    indent = '\t' * 4
+                    caller_stack = ('\n' + indent).join(
+                        '{}() in {}:{:d}'.format(fr[3], fr[1], fr[2])
+                        for fr in caller_frames)
+                    self.log.debug('State was changed by (last {:d} frames):\n'
+                                   '{}{}'.format(frame_limit, indent,
+                                                 caller_stack))
 
         # TODO: Fire a transition event
 
@@ -379,7 +384,14 @@ class Graph(Component):
 
         for port in component.inputs:
             if port.is_connected():
-                upstream.add(port.source_port.component)
+                source_component = port.source_port.component
+                if isinstance(source_component, Graph):
+                    for graph_input in source_component.inputs:
+                        # TODO: make this recursive so that we can get inputs from graphs connected to graphs
+                        if not isinstance(graph_input.source_port, Graph):
+                            upstream.add(graph_input.source_port.component)
+                else:
+                    upstream.add(source_component)
 
         return upstream
 
@@ -398,10 +410,12 @@ class Graph(Component):
         components : the downstream components
             set of ``Component``
         """
+        raise NotImplementedError('this method needs to be revised!')
+
         downstream = set()
 
         for port in component.outputs:
-            if port.is_connected():
+            if port.is_connected() and not isinstance(port.target_port.component, Graph):
                 downstream.add(port.target_port.component)
 
         return downstream
@@ -483,9 +497,12 @@ class Graph(Component):
                 if isinstance(node, Graph):
                     adjacent.add(node)
                     if include_graphs:
-                        results.add(node)
+                        results.add((node, graph))
                 else:
-                    results.add(node)
+                    if include_graphs:
+                        results.add((node, graph))
+                    else:
+                        results.add(node)
 
             for node in adjacent:
                 bfs_walk(node)
@@ -653,7 +670,7 @@ class Graph(Component):
                     input_port.source_port is None)
 
         self_starters = set()
-        for node in self.get_all_components():
+        for node in self.get_all_components(include_graphs=False):
             # Self-starter nodes should have either no inputs or only
             # have disconnected optional inputs.
             if len(node.inputs) == 0:
@@ -677,10 +694,21 @@ class Graph(Component):
         is_terminated : bool
             whether the graph has terminated.
         """
-        return all([component.is_terminated() for component in self.get_all_components()])
+        return all([component.is_terminated()
+                    for component in self.get_all_components(include_graphs=False)])
 
     def is_suspended(self):
-        return any([component.is_suspended() for component in self.get_all_components()])
+        return any([component.is_suspended()
+                    for component in self.get_all_components(include_graphs=False)])
+
+    def terminate(self, ex=None):
+        # Terminate all components
+        for component in self.components:
+            if not component.is_terminated():
+                component.terminate(ex)
+
+        # Terminate self
+        super(Graph, self).terminate(ex)
 
     # TODO: move all serializers to their own module / abstract class
 
@@ -776,7 +804,7 @@ class Graph(Component):
 
                 build_edges(next_components, visited_nodes)
 
-        components = self.get_all_components()
+        components = self.get_all_components(include_graphs=False)
         build_nodes(components)
         build_edges(components)
 

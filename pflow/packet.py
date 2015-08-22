@@ -1,4 +1,5 @@
-from abc import ABCMeta
+from abc import ABCMeta, abstractmethod
+import json
 
 DEFALT_PACKET_CHANNEL = 'default'
 
@@ -108,3 +109,48 @@ class SwitchMapNamespace(ControlPacket):
         """
         super(SwitchMapNamespace, self).__init__()
         self.namespace = namespace
+
+
+class PacketSerializer(object):
+    """
+    Responsible for serializing/deserializing packet data.
+    """
+    __metaclass__ = ABCMeta
+
+    @abstractmethod
+    def serialize(self, packet):
+        pass
+
+    @abstractmethod
+    def deserialize(self, serialized_packet):
+        pass
+
+
+class JsonPacketSerializer(PacketSerializer):
+    """
+    JSON serializer.
+    """
+    def serialize(self, packet):
+        if not isinstance(packet, Packet):
+            raise ValueError('packet must be a Packet')
+
+        # TODO: handle dates as iso8601
+        return json.dumps(packet.value)
+
+    def deserialize(self, serialized_packet):
+        packet_value = json.loads(serialized_packet)
+        return Packet(packet_value)
+
+
+class NoopSerializer(PacketSerializer):
+    """
+    A serializer that basically does nothing.
+    """
+    def serialize(self, packet):
+        if not isinstance(packet, Packet):
+            raise ValueError('packet must be a Packet')
+
+        return packet.value
+
+    def deserialize(self, serialized_packet):
+        return Packet(serialized_packet)

@@ -47,15 +47,6 @@ class GraphExecutor(object):
             component._out_queues = out_queues
 
             try:
-                # Component should always be in a INITIALIZED state when first
-                # running!
-                if component.state != ComponentState.INITIALIZED:
-                    raise exc.ComponentStateError(
-                        component,
-                        'state is {}, but expected INITIALIZED'.format(
-                            component.state))
-
-                component.state = ComponentState.ACTIVE
                 component.run()
                 if component.is_alive():
                     component.terminate()
@@ -209,54 +200,3 @@ class GraphExecutor(object):
         Suspend execution of this thread until the next packet arrives.
         """
         pass
-
-
-class PacketSerializer(object):
-    """
-    Responsible for serializing/deserializing packet data.
-    """
-    __metaclass__ = ABCMeta
-
-    @abstractmethod
-    def serialize(self, packet):
-        pass
-
-    @abstractmethod
-    def deserialize(self, serialized_packet):
-        pass
-
-
-class JsonPacketSerializer(PacketSerializer):
-    """
-    JSON serializer.
-    """
-    def serialize(self, packet):
-        from ..port import Packet
-        if not isinstance(packet, Packet):
-            raise ValueError('packet must be a Packet')
-
-        # TODO: handle dates as iso8601
-        return json.dumps(packet.value)
-
-    def deserialize(self, serialized_packet):
-        from ..port import Packet
-
-        packet_value = json.loads(serialized_packet)
-        return Packet(packet_value)
-
-
-class NoopSerializer(PacketSerializer):
-    """
-    A serializer that basically does nothing.
-    """
-    def serialize(self, packet):
-        from ..port import Packet
-        if not isinstance(packet, Packet):
-            raise ValueError('packet must be a Packet')
-
-        return packet.value
-
-    def deserialize(self, serialized_packet):
-        from ..port import Packet
-
-        return Packet(serialized_packet)

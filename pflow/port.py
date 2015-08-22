@@ -147,7 +147,8 @@ class InputPort(Port):
 
     def is_connected(self):
         return (self.component is not None and
-                self.source_port is not None)
+                (self.source_port is not None or
+                 self.proxied_port is not None))
 
     def receive_packet(self, timeout=None):
         """
@@ -183,6 +184,8 @@ class InputPort(Port):
         """
         packet = self.receive_packet(timeout=timeout)
         if packet is EndOfStream:
+            self.log.debug('{} is closed (component={}, source_port={}, proxied_port={})'.format(
+                           self, self.component, self.source_port, self.proxied_port))
             return packet
         else:
             value = packet.value
@@ -374,15 +377,15 @@ class PortRegistry(object):
         """
         for port in ports:
             if not isinstance(port, self._required_superclasses):
-                raise ValueError('%s must be an instance of: %s' %
-                                 (port, ', '.join([c.__name__ for c in self._required_superclasses])))
+                raise ValueError('{} must be an instance of: {}'.format(
+                                 port, ', '.join([c.__name__ for c in self._required_superclasses])))
 
             if port.name in self._ports:
-                raise ValueError('%s already exists' % port)
+                raise ValueError('{} already exists'.format(port))
 
             if port.component is not None and port.component != self._component:
-                raise ValueError('%s is already attached to %s' %
-                                 (port, port.component))
+                raise ValueError('{} is already attached to {}'.format(
+                                 port, port.component))
 
             port.component = self._component
             self._ports[port.name] = port
@@ -410,18 +413,24 @@ class PortRegistry(object):
             raise ValueError('Unable to export port {} because exported_port {} '
                              'is already proxied to self'.format(name))
 
+        if exported_port.is_connected():
+            raise ValueError('exported_port {} is already connected!'.format(exported_port))
+
         port = copy.copy(exported_port)
         port.name = name
         port.component = self._component
-        port.proxied_port = exported_port
 
         if isinstance(port, InputPort):
             port.source_port = None
+            exported_port.source_port = port
+            port.proxied_port = exported_port
         elif isinstance(port, OutputPort):
             port.target_port = None
+            exported_port.target_port = port
+            raise NotImplementedError('OutputPorts cant be exported yet')
 
-        # TODO: delete existing ports
         self.add_ports(port)
+        return port
 
     def __getitem__(self, port_name):
         """

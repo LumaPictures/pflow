@@ -38,7 +38,7 @@ import gevent
 import greenlet
 
 from .base import GraphExecutor
-from ..core import ComponentState
+from ..core import Graph, ComponentState
 from ..port import Port, InputPort, EndOfStream
 from .. import exc
 
@@ -57,10 +57,11 @@ class SingleProcessGraphExecutor(GraphExecutor):
 
     def __init__(self, graph):
         super(SingleProcessGraphExecutor, self).__init__(graph)
-        self._recv_queues = None
-        self._running = False
-        self._coroutines = None
-        self._last_switch_time = None
+        self._graph_lookup = None       # Lookup of graphs by component
+        self._recv_queues = None        # Queues for graph edges (port-to-port communication)
+        self._running = False           # Is the graph running?
+        self._coroutines = None         # Tuples of (greenlet, component)
+        self._last_switch_time = None   # Last context switch (used by _blocking_greenlet_detector)
 
     def _blocking_greenlet_detector(self, event, (origin, target)):
         """
@@ -107,9 +108,22 @@ class SingleProcessGraphExecutor(GraphExecutor):
 
         self._running = True
         try:
-            all_components = self.graph.get_all_components()
-            for component in self.graph.get_all_components(include_graphs=True):
+            all_components = set()
+            self._graph_lookup = {}
+            for component, graph in self.graph.get_all_components(include_graphs=True):
+                self._graph_lookup[component] = graph
+                all_components.add(component)
                 component.executor = self
+
+                # Component should always be in a INITIALIZED state when first
+                # running!
+                if component.state != ComponentState.INITIALIZED:
+                    raise exc.ComponentStateError(
+                        component,
+                        'state is {}, but expected INITIALIZED'.format(
+                            component.state))
+
+                component.state = ComponentState.ACTIVE
 
             self.log.debug('Components in {}: {}'.format(self.graph,
                                                          ', '.join(map(str, all_components))))
@@ -119,8 +133,7 @@ class SingleProcessGraphExecutor(GraphExecutor):
                 [(gevent.spawn(self._create_component_runner(comp),
                                None,   # in_queues
                                None),  # out_queues
-                  comp) for comp in all_components]
-            )
+                  comp) for comp in filter(lambda c: not isinstance(c, Graph), all_components)])
 
             last_exception = None
 
@@ -136,7 +149,7 @@ class SingleProcessGraphExecutor(GraphExecutor):
                     component.name, coroutine.exception.__class__.__name__,
                     coroutine.exception.message))
 
-                for c in self._coroutines.values():
+                for c in all_components:
                     if c.is_alive():
                         c.terminate(ex=last_exception)
 
@@ -166,15 +179,26 @@ class SingleProcessGraphExecutor(GraphExecutor):
         if not isinstance(port, Port):
             raise ValueError('port must be a Port')
 
-        if port.id not in self._recv_queues:
+        # TODO: connect exported ports between graphs
+        if port.proxied_port is not None:
+            self.log.debug('Proxied {} -> {}'.format(port, port.proxied_port))
+            port = port.proxied_port
+
+        graph = self._graph_lookup.get(port.component)
+        if graph is None:
+            raise ValueError('{} component {} has no graph in lookup'.format(port, port.component))
+
+        queue_key = '{}.{}.{}'.format(graph.name, port.component.name, port.name)
+
+        if queue_key not in self._recv_queues:
             if isinstance(port, InputPort):
                 maxsize = port.max_queue_size
             else:
                 maxsize = None
 
-            self._recv_queues[port.id] = queue.Queue(maxsize=maxsize)
+            self._recv_queues[queue_key] = queue.Queue(maxsize=maxsize)
 
-        return self._recv_queues[port.id]
+        return self._recv_queues[queue_key]
 
     def send_port(self, component, port_name, packet, timeout=None):
         source_port = component.outputs[port_name]

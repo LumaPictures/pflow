@@ -10,7 +10,7 @@ class LogTap(Graph):
         split = Split('SPLIT')
         self.inputs.export('IN', split.inputs['IN'])
         self.connect(split.outputs['OUT_A'], ConsoleLineWriter('LOG').inputs['IN'])
-        self.outputs.export('OUT', split.outputs['OUT_A'])
+        #self.outputs.export('OUT', split.outputs['OUT_B'])
 
 
 class SubGraphExample(Graph):
@@ -21,5 +21,5 @@ class SubGraphExample(Graph):
         tap = LogTap('LOG_TAP')
         self.connect(gen.outputs['OUT'], tap.inputs['IN'])
 
-        self.inputs.export('IN', tap.inputs['IN'])
-        self.outputs.export('OUT', tap.outputs['OUT'])
+        #self.inputs.export('IN', tap.inputs['IN'])
+        #self.outputs.export('OUT', tap.outputs['OUT'])

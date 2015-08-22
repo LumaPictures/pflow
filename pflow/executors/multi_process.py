@@ -16,8 +16,9 @@ try:
 except ImportError:
     import Queue as queue  # 2.x
 
-from .base import GraphExecutor, NoopSerializer
+from .base import GraphExecutor
 from ..core import ComponentState
+from ..packet import NoopSerializer
 from .. import exc
 
 
@@ -50,6 +51,7 @@ class MultiProcessGraphExecutor(GraphExecutor):
         def wrapped_runner(*args):
             import sys
 
+            # TODO: Implement component INITIALIZED state check and set its state to ACTIVATED
             try:
                 run_loop(*args)
             except Exception, ex:
@@ -76,6 +78,7 @@ class MultiProcessGraphExecutor(GraphExecutor):
 
         # Create queues for all edges
         edges = set()
+        # TODO: Get components of subgraphs
         for component in self.graph.components:
             for out_port in component.outputs:
                 if out_port.is_connected():
@@ -154,6 +157,7 @@ class MultiProcessGraphExecutor(GraphExecutor):
         return packet
 
     def _get_inport_queue(self, component, port_name):
+        # TODO: handle proxied ports
         if hasattr(component, '_in_queues'):
             # Called from component process
             return component._in_queues[port_name]
@@ -162,6 +166,7 @@ class MultiProcessGraphExecutor(GraphExecutor):
             return self._in_queues[component.name][port_name]
 
     def _get_outport_queue(self, component, port_name):
+        # TODO: handle proxied ports
         if hasattr(component, '_out_queues'):
             # Called from component process
             return component._out_queues[port_name]
