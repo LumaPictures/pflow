@@ -50,10 +50,7 @@ class Runtime(object):
         #buffer
     }
 
-    def __init__(self, runtime_id, executor_class=SingleProcessGraphExecutor):
-        if runtime_id is None:
-            raise ValueError('runtime_id is required')
-
+    def __init__(self, executor_class=SingleProcessGraphExecutor):
         self.log = logging.getLogger('%s.%s' % (self.__class__.__module__,
                                                 self.__class__.__name__))
 
@@ -61,7 +58,6 @@ class Runtime(object):
         self._graphs = {}  # Graph instances, keyed by graph ID
         self._executors = {}  # GraphExecutor instances, keyed by graph ID
 
-        self.runtime_id = runtime_id
         self.executor_class = executor_class
 
         self.log.debug('Initialized runtime!')
@@ -88,8 +84,7 @@ class Runtime(object):
         all_capabilities = capabilities
 
         return {
-            'id': self.runtime_id,
-            'label': textwrap.dedent(self.__doc__ or '').strip(),
+            'label': 'pflow python runtime',
             'type': 'pflow',
             'version': self.PROTOCOL_VERSION,
             'capabilities': capabilities,
@@ -242,6 +237,7 @@ class Runtime(object):
             raise ValueError('Graph {} is already started'.format(graph_id))
 
         # gevent.spawn(executor.execute)
+        # FIXME: single threaded runtime blocks here (use gevent.Group.spawn above):
         executor.execute()
 
         # TODO: send 'started' message back
@@ -579,7 +575,7 @@ class RuntimeRegistry(object):
     __metaclass__ = ABCMeta
 
     @abstractmethod
-    def register_runtime(self, runtime, user_id, address):
+    def register_runtime(self, runtime, runtime_id, user_id, address):
         """
         Registers a runtime.
 
@@ -589,7 +585,7 @@ class RuntimeRegistry(object):
         """
         pass
 
-    def ping_runtime(self, runtime):
+    def ping_runtime(self, runtime_id):
         """
         Pings a registered runtime, keeping it alive in the registry.
         This should be called periodically.
@@ -611,16 +607,16 @@ class FlowhubRegistry(RuntimeRegistry):
 
         self._endpoint = 'http://api.flowhub.io'
 
-    def register_runtime(self, runtime, user_id, address):
+    def register_runtime(self, runtime, runtime_id, user_id, address):
         if not isinstance(runtime, Runtime):
             raise ValueError('runtime must be a Runtime instance')
 
-        runtime_meta = runtime.get_runtime_meta()
+        runtime_metadata = runtime.get_runtime_meta()
         payload = {
-            'id': runtime.runtime_id,
+            'id': runtime_id,
 
-            'label': textwrap.dedent(runtime.__doc__ or '').strip(),
-            'type': runtime_meta['type'],
+            'label': runtime_metadata['label'],
+            'type': runtime_metadata['type'],
 
             'address': address,
             'protocol': 'websocket',
@@ -629,18 +625,15 @@ class FlowhubRegistry(RuntimeRegistry):
             'secret': '9129923',  # unused
         }
 
-        self.log.info('Registering runtime %s for user %s...' % (runtime.runtime_id, user_id))
-        response = requests.put('%s/runtimes/%s' % (self._endpoint, runtime.runtime_id),
+        self.log.info('Registering runtime %s for user %s...' % (runtime_id, user_id))
+        response = requests.put('%s/runtimes/%s' % (self._endpoint, runtime_id),
                                 data=json.dumps(payload),
                                 headers={'Content-type': 'application/json'})
         self._ensure_http_success(response)
 
-    def ping_runtime(self, runtime):
-        if not isinstance(runtime, Runtime):
-            raise ValueError('runtime must be a Runtime instance')
-
-        self.log.info('Pinging runtime %s...' % runtime.runtime_id)
-        response = requests.post('%s/runtimes/%s' % (self._endpoint, runtime.runtime_id))
+    def ping_runtime(self, runtime_id):
+        self.log.info('Pinging runtime %s...' % runtime_id)
+        response = requests.post('%s/runtimes/%s' % (self._endpoint, runtime_id))
         self._ensure_http_success(response)
 
     @classmethod
@@ -650,14 +643,14 @@ class FlowhubRegistry(RuntimeRegistry):
                             (response.status_code, response.text))
 
 
-def create_runtime_id():
-    return str(uuid.uuid4())
+def create_runtime_id(user_id, address):
+    return str(uuid.uuid3(uuid.UUID(user_id), 'pflow_' + address))
 
 
 def main():
     # Argument defaults
     defaults = {
-        'host': socket.gethostname(),
+        'host': 'localhost',
         'port': 3569
     }
 
@@ -682,7 +675,7 @@ def main():
         help='File to send log output to (default: none)')
     argp.add_argument(
         '-v', '--verbose', action='store_true',
-         help='Enable verbose logging')
+        help='Enable verbose logging')
 
     # TODO: add arg for executor type (multiprocess, singleprocess, distributed)
     # TODO: add args for component search paths
@@ -701,13 +694,14 @@ def main():
                           'pflow.executors': logging.INFO
                       })
 
+    address = 'ws://{}:{:d}'.format(args.host, args.port)
     runtime_id = args.runtime_id
     if not runtime_id:
-        runtime_id = create_runtime_id()
+        runtime_id = create_runtime_id(args.user_id, address)
         log.warn('No runtime ID was specified, so one was '
                  'generated: {}'.format(runtime_id))
 
-    runtime = Runtime(runtime_id)
+    runtime = Runtime()
     runtime.register_module(pflow.components)
 
     def runtime_application_task():
@@ -727,13 +721,12 @@ def main():
         flowhub = FlowhubRegistry()
 
         # Register runtime
-        flowhub.register_runtime(runtime, args.user_id,
-                                 'ws://%s:%d' % (args.host, args.port))
+        flowhub.register_runtime(runtime, runtime_id, args.user_id, address)
 
         # Ping
         delay_secs = 60  # Ping every minute
         while True:
-            flowhub.ping_runtime(runtime)
+            flowhub.ping_runtime(runtime_id)
             gevent.sleep(delay_secs)
 
     # Start!
