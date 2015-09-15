@@ -32,29 +32,31 @@ then run the example graphs with `./example.py`.
 To define and execute a graph, subclass `pflow.core.Graph`, override `initialize()` to construct the graph,
 then run it using a `GraphExecutor` implementation:
 
-    from pflow.executors.single_process import SingleProcessGraphExecutor
-    from pflow.components import *
-
-    
-    class MyGraph(Graph):
-        def initialize(self):
-            tail_1 = FileTailReader('TAIL_1')
-            self.set_initial_packet(tail_1.inputs['PATH'], '/var/log/system.log')
-    
-            filter_1 = RegexFilter('FILTER_1')
-            self.set_initial_packet(filter_1.inputs['REGEX'],
-                                    r' (USER|DEAD)_PROCESS: ')
-    
-            self.connect(tail_1.outputs['OUT'], 
-                         filter_1.inputs['IN'])
-    
-            self.connect(filter_1.outputs['OUT'],
-                         ConsoleLineWriter('LOG_1').inputs['IN'])    
+```python
+from pflow.executors.single_process import SingleProcessGraphExecutor
+from pflow.components import *
 
 
-    graph = MyGraph('MY_GRAPH_NAME')
-    executor = SingleProcessGraphExecutor(graph)
-    executor.execute()
+class MyGraph(Graph):
+    def initialize(self):
+        tail_1 = FileTailReader('TAIL_1')
+        self.set_initial_packet(tail_1.inputs['PATH'], '/var/log/system.log')
+
+        filter_1 = RegexFilter('FILTER_1')
+        self.set_initial_packet(filter_1.inputs['REGEX'],
+                                r' (USER|DEAD)_PROCESS: ')
+
+        self.connect(tail_1.outputs['OUT'], 
+                     filter_1.inputs['IN'])
+
+        self.connect(filter_1.outputs['OUT'],
+                     ConsoleLineWriter('LOG_1').inputs['IN'])    
+
+
+graph = MyGraph('MY_GRAPH_NAME')
+executor = SingleProcessGraphExecutor(graph)
+executor.execute()
+```
 
 Components are connected by their ports by calling `Graph.connect(source_output_port, target_input_port)`.
 
@@ -69,27 +71,28 @@ You can find some premade components in the `pflow.components` module. If you ca
 you can always create a custom component by subclassing `pflow.core.Component`, then overriding the `initialize()` 
 and `run()` methods:
 
-    from pflow.core import Component, InputPort, OutputPort, EndOfStream, keepalive
-    
-    
-    class MySleepComponent(Component):
-        '''
-        Receives input from IN, sleeps for a predetermined amount of time,
-        then forwards it to output OUT.
-        '''
-        def initialize(self):
-            self.inputs.add(InputPort('IN'))
-            self.outputs.add(OutputPort('OUT'))
-        
-        @keepalive
-        def run(self):
-            input_packet = self.inputs['IN'].receive_packet()
-            if input_packet is EndOfStream:
-                self.terminate()
-            else:
-                time.sleep(5)
-                self.outputs['OUT'].send_packet(input_packet)
+```python
+from pflow.core import Component, InputPort, OutputPort, EndOfStream, keepalive
 
+
+class MySleepComponent(Component):
+    '''
+    Receives input from IN, sleeps for a predetermined amount of time,
+    then forwards it to output OUT.
+    '''
+    def initialize(self):
+        self.inputs.add(InputPort('IN'))
+        self.outputs.add(OutputPort('OUT'))
+
+    @keepalive
+    def run(self):
+        input_packet = self.inputs['IN'].receive_packet()
+        if input_packet is EndOfStream:
+            self.terminate()
+        else:
+            time.sleep(5)
+            self.outputs['OUT'].send_packet(input_packet)
+```
 
 ### Component Design
 
@@ -127,3 +130,52 @@ Rules for creating components:
 ### Class Diagram
 
 ![Class diagram](./docs/class-diagram.png)
+
+
+# Using the UI
+
+## Installing
+
+```
+npm install -g n
+npm install -g bower
+npm install -g grunt-cli
+sudo n 0.10
+
+mkdir noflo
+cd noflo
+
+git clone https://github.com/noflo/noflo-ui
+cd noflo-ui
+git checkout 0.10.0
+npm install
+# running bower before grunt prompts to resolve a dependency conflict which otherwise causes grunt to fail
+bower install
+grunt build
+python -m SimpleHTTPServer 8000
+```
+
+## Running
+
+1. Open your browser to `http://localhost:8000/`
+2. Log in using your github account. Go to setting and copy your "User Identifier"
+3. In a fresh shell, `cd` into the root of the pflow repo.
+4. Start the pflow runtime.
+   ```
+   python -m pflow.runtime --user-id <USER_ID>
+   ```
+5. Back in the browser, create a new project in NoFlo selecting the pflow runtime
+6. Green arrows should appear on the top-right menu, right before
+   `ws:\\localhost:3569`
+
+# Testing
+
+First install the test suite:
+```
+nmp install -g fbp-protocol
+```
+
+Then, from the repo directory, run the tests
+```
+fbp-test
+```
