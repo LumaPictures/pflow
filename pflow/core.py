@@ -380,45 +380,40 @@ class Graph(Component):
         components : the upstream components
             set of ``Component``
         """
-        upstream = set()
+        parents = set()
 
         for port in component.inputs:
-            if port.is_connected():
-                source_component = port.source_port.component
-                if isinstance(source_component, Graph):
-                    for graph_input in source_component.inputs:
-                        # TODO: make this recursive so that we can get inputs from graphs connected to graphs
-                        if not isinstance(graph_input.source_port, Graph):
-                            upstream.add(graph_input.source_port.component)
-                else:
-                    upstream.add(source_component)
+            if not port.is_connected():
+                # Only care about connected ports.
+                continue
 
-        return upstream
+            source_port = port.source_port
+            source_component = source_port.component
 
-    @classmethod
-    def get_downstream(cls, component):
-        """
-        Immediate downstream components.
+            if isinstance(source_component, Graph):
+                # Input port is sourced from a graph.
+                #
+                # Need to handle special proxied ports so that components within
+                # the graph are referenced, rather than the graph itself.
+                if isinstance(source_port, InputPort):
+                    # Get upstream component connected to the graph input port.
+                    for graph_port in source_component.inputs:
+                        if graph_port.proxied_port is port:
+                            parents.add(graph_port.source_port.component)
+                elif isinstance(source_port, OutputPort):
+                    # Get upstream component connected to the graph output port.
+                    for graph_port in source_component.outputs:
+                        if graph_port.proxied_outport is not None:
+                            parents.add(graph_port.proxied_outport.component)
+            else:
+                # Input port is sourced from another component.
+                parents.add(source_component)
 
-        Parameters
-        ----------
-        component : ``Component``
-            the Component to check.
+        # log.debug('{} upstream is: {}'.format(component,
+        #                                       ', '.join(['{}:{}'.format(c, c.state.value)
+        #                                       for c in parents])))
 
-        Returns
-        -------
-        components : the downstream components
-            set of ``Component``
-        """
-        raise NotImplementedError('this method needs to be revised!')
-
-        downstream = set()
-
-        for port in component.outputs:
-            if port.is_connected() and not isinstance(port.target_port.component, Graph):
-                downstream.add(port.target_port.component)
-
-        return downstream
+        return parents
 
     @classmethod
     def is_upstream_terminated(cls, component):

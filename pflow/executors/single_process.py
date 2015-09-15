@@ -39,7 +39,7 @@ import greenlet
 
 from .base import GraphExecutor
 from ..core import Graph, ComponentState
-from ..port import Port, InputPort, EndOfStream
+from ..port import Port, InputPort, OutputPort, EndOfStream
 from .. import exc
 
 
@@ -179,9 +179,8 @@ class SingleProcessGraphExecutor(GraphExecutor):
         if not isinstance(port, Port):
             raise ValueError('port must be a Port')
 
-        # TODO: connect exported ports between graphs
+        # Connect exported ports between graphs
         if port.proxied_port is not None:
-            self.log.debug('Proxied {} -> {}'.format(port, port.proxied_port))
             port = port.proxied_port
 
         graph = self._graph_lookup.get(port.component)
@@ -211,7 +210,8 @@ class SingleProcessGraphExecutor(GraphExecutor):
                        source_port, dest_port, packet))
 
         try:
-            # TODO: Make this call non-blocking
+            # TODO: Make this call non-blocking to prevent deadlock
+            # See: https://github.com/LumaPictures/pflow/issues/17
             q.put(packet)
             self.suspend_thread()
             component.state = ComponentState.ACTIVE
@@ -247,6 +247,11 @@ class SingleProcessGraphExecutor(GraphExecutor):
                 if self.graph.is_upstream_terminated(component):
                     # No more data left to receive_packet and upstream has
                     # terminated.
+                    self.log.debug('{} is closing {} because its upstream is terminated: {}'.format(
+                                   component,
+                                   source_port,
+                                   ', '.join(map(str, self.graph.get_upstream(component)))))
+
                     component.state = ComponentState.ACTIVE
 
                     if source_port.is_open():

@@ -22,7 +22,8 @@ def run_graph(graph):
     graphml_out_path = os.path.expanduser('~/graphml')
     if not os.path.exists(graphml_out_path):
         os.mkdir(graphml_out_path)
-    graph.write_graphml('%s/%s.graphml' % (graphml_out_path, graph.name))
+    graph_file = '%s/%s.graphml' % (graphml_out_path, graph.name)
+    graph.write_graphml(graph_file)
 
     log.info('Running graph: %s' % graph.name)
     log.debug('Runtime is: %s' % GraphExecutorImpl.__name__)
@@ -38,14 +39,14 @@ def main():
                             console_level=logging.INFO)
 
     sag = example_graphs.awesome.SuperAwesomeDemoGraph('AWESOME_1')
-
     test_graphs = [
         example_graphs.simple.SimpleGraph('SIMPLE'),
         sag,
         sag,
-        #example_graphs.popular_music.PopularMusicGraph('MUSIC_1'),
-        #example_graphs.mongo_poc.MongoPocGraph('MONGO_POC'),
+        # example_graphs.popular_music.PopularMusicGraph('MUSIC_1'),
+        # example_graphs.mongo_poc.MongoPocGraph('MONGO_POC'),
         # example_graphs.process_spawning_logger.ProcessSpawningLogger('PROCSPAWN_1'),
+        example_graphs.subgraphs.SubGraphExample('SUBGRAPH_1')
     ]
 
     for graph in test_graphs:

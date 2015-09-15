@@ -5,8 +5,10 @@
 *.pyo
 *.DS_Store
 *.iml
+*.ipynb
 /.idea/
 /*.egg-info/
 /.eggs/
 /node_modules/
 /test_runtime
+.ipynb_checkpoints/

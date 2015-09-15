@@ -290,8 +290,13 @@ class OutputPort(Port):
         executor.send_port(self.component, self.name, packet)
 
     def send(self, value):
-        packet = self.component.create_packet(value)
-        self.send_packet(packet)
+        if self.proxied_port is None:
+            packet = self.component.create_packet(value)
+            self.send_packet(packet)
+        else:
+            #self.log.info('proxy:send(%s)' % value)
+            packet = self.component.create_packet(value)
+            self.proxied_port.send_packet(packet)
 
     def start_substream(self):
         self._bracket_depth += 1
@@ -364,6 +369,8 @@ class PortRegistry(object):
         self._port_type = port_type
         self._array_port_type = array_port_type
         self._required_superclasses = (port_type, array_port_type)
+        self.log = logging.getLogger('%s.%s' % (self.__class__.__module__,
+                                                self.__class__.__name__))
 
         if not issubclass(port_type, BasePort):
             raise ValueError('port_type must be Port subclass')
@@ -404,6 +411,10 @@ class PortRegistry(object):
         return port
 
     def export(self, name, exported_port):
+        from .core import Graph
+        if not isinstance(self._component, Graph):
+            raise ValueError('export() can only be called from a Graph')
+
         if not isinstance(exported_port, self._port_type):
             raise ValueError('Unable to export port {} because exported_port '
                              'must be a {}'.format(name,
@@ -426,8 +437,12 @@ class PortRegistry(object):
             port.proxied_port = exported_port
         elif isinstance(port, OutputPort):
             port.target_port = None
-            exported_port.target_port = port
-            raise NotImplementedError('OutputPorts cant be exported yet')
+            exported_port.proxied_port = port
+            port.proxied_outport = exported_port
+
+        self.log.debug('Graph {} exported {} as {}'.format(port.component,
+                                                           exported_port,
+                                                           port))
 
         self.add_ports(port)
         return port

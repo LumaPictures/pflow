@@ -176,7 +176,9 @@ class Split(Component):
             if out_b.is_open():
                 out_b.end_substream()
         else:
-            self.log.debug(u'Send: {}'.format(packet.value))
+            self.log.debug(u'Send: {} (OUT_A={}, OUT_B={})'.format(packet.value,
+                                                                   out_a.is_open(),
+                                                                   out_b.is_open()))
             if out_a.is_open():
                 out_a.send(packet.value)
             if out_b.is_open():
