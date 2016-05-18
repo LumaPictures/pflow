@@ -3,7 +3,9 @@
 [![Build Status](https://travis-ci.org/LumaPictures/pflow.svg)](https://travis-ci.org/LumaPictures/pflow)
 [![Coverage Status](https://coveralls.io/repos/Flushot/pflow/badge.svg?branch=master&service=github)](https://coveralls.io/github/Flushot/pflow?branch=master)
 
-**THIS PROJECT IS STILL IN ITS VERY EARLY STAGES**
+**THIS PROJECT IS DEPRECATED**
+
+**It is superceded by https://github.com/chadrik/rill**
 
 ## What is this?
 
